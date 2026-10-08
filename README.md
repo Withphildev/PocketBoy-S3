@@ -2,7 +2,7 @@
 
 PocketBoy S3 is an offline, browser-based Game Boy and Game Boy Color player hosted by an M5Stack StickS3.
 
-> **Playable prototype — v0.2.3.** This build adds local GB/GBC emulation in the phone browser. It still needs broad game, audio, save, and mobile-device testing.
+> **Playable prototype — v0.2.4.** This build adds local GB/GBC emulation in the phone browser. It still needs broad game, audio, save, and mobile-device testing.
 
 ## Current prototype
 
@@ -18,6 +18,7 @@ PocketBoy S3 is an offline, browser-based Game Boy and Game Boy Color player hos
 - Uses the complete phone display in fullscreen while preserving the original game aspect ratio.
 - Keeps fullscreen as a clean Bluetooth-controller-only mode with no touchscreen overlay.
 - Requires a detected controller before entering fullscreen and exits if it disconnects.
+- Maps L2 to toggle fullscreen and requests landscape orientation while fullscreen is active.
 - Shows live buttons, D-pad, left stick, Start, and Select input.
 - Displays Wi-Fi onboarding or a join QR code on the StickS3.
 - Dims the display after 30 seconds while keeping the portal active.

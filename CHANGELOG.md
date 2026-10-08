@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.2.4-prototype
+
+- Mapped the L2 trigger to toggle fullscreen on its press edge.
+- Changed fullscreen to contain only the game screen, with no surrounding player UI.
+- Requests landscape orientation after fullscreen begins and unlocks orientation on exit.
+- Added clear feedback when Chrome rejects controller-initiated fullscreen because it requires a tap.
+
 ## v0.2.3-prototype
 
 - Changed fullscreen playback to use the complete phone or tablet display.

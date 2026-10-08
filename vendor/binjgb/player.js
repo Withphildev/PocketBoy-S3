@@ -909,6 +909,7 @@ function gamepadButton(gamepad, index) {
 
 let pocketBoyTouchActive = false;
 let pocketBoyGamepadConnected = false;
+let pocketBoyL2Pressed = false;
 controllerEl.addEventListener('touchstart', () => {
   pocketBoyTouchActive = true;
 }, {passive: true});
@@ -937,12 +938,17 @@ function pollPocketBoyGamepad() {
   const playerShell = document.querySelector('.screenCard');
   if (playerShell) {
     playerShell.classList.toggle('has-gamepad', !!gamepad);
-    if (pocketBoyGamepadConnected && !gamepad &&
-        document.fullscreenElement === playerShell && document.exitFullscreen) {
+    if (pocketBoyGamepadConnected && !gamepad && document.fullscreenElement &&
+        document.exitFullscreen) {
       document.exitFullscreen().catch(() => {});
     }
   }
   pocketBoyGamepadConnected = !!gamepad;
+  const l2Pressed = gamepadButton(gamepad, 6);
+  if (l2Pressed && !pocketBoyL2Pressed && window.PocketBoyFullscreen) {
+    window.PocketBoyFullscreen.toggle();
+  }
+  pocketBoyL2Pressed = l2Pressed;
   if (emulator && gamepad && !pocketBoyTouchActive) {
     const x = gamepad.axes[0] || 0;
     const y = gamepad.axes[1] || 0;
