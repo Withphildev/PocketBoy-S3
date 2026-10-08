@@ -1,0 +1,18 @@
+.pio/
+.vscode/
+.DS_Store
+
+# Generated during the PlatformIO pre-build step.
+src/EmbeddedAssets.generated.h
+
+# Build products.
+*.bin
+*.elf
+*.map
+
+# Never commit game ROMs or user save data.
+*.gb
+*.gbc
+*.gba
+*.sav
+*.state
