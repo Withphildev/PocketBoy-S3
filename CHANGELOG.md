@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.3-prototype
+
+- Changed fullscreen playback to use the complete phone or tablet display.
+- Preserved the 160×144 game aspect ratio without stretching or cropping.
+- Made fullscreen a Bluetooth-controller-only mode with no touchscreen overlay.
+- Requires a detected controller before entering fullscreen.
+- Automatically exits fullscreen if the Bluetooth controller disconnects.
+
 ## v0.2.2-prototype
 
 - Added an explicit Sound On/Off control that satisfies Chrome's audio activation requirement.

@@ -908,6 +908,7 @@ function gamepadButton(gamepad, index) {
 }
 
 let pocketBoyTouchActive = false;
+let pocketBoyGamepadConnected = false;
 controllerEl.addEventListener('touchstart', () => {
   pocketBoyTouchActive = true;
 }, {passive: true});
@@ -933,6 +934,15 @@ function pollPocketBoyGamepad() {
     statusEl.textContent = gamepad ? gamepad.id : 'No controller detected';
     statusEl.classList.toggle('connected', !!gamepad);
   }
+  const playerShell = document.querySelector('.screenCard');
+  if (playerShell) {
+    playerShell.classList.toggle('has-gamepad', !!gamepad);
+    if (pocketBoyGamepadConnected && !gamepad &&
+        document.fullscreenElement === playerShell && document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }
+  pocketBoyGamepadConnected = !!gamepad;
   if (emulator && gamepad && !pocketBoyTouchActive) {
     const x = gamepad.axes[0] || 0;
     const y = gamepad.axes[1] || 0;

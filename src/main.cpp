@@ -4,7 +4,7 @@
 #include "WebPortal.h"
 
 namespace {
-constexpr char kVersion[] = "v0.2.2-prototype";
+constexpr char kVersion[] = "v0.2.3-prototype";
 constexpr uint8_t kFacePin = 11;
 constexpr uint8_t kM5Pin = 12;
 constexpr uint8_t kNormalBrightness = 80;
