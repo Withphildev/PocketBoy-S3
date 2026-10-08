@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.2.5-prototype
+
+- Replaced the hard dependency on Chrome's Fullscreen API with an immediate CSS screen-mode fallback.
+- Made L2 and the WebUI button toggle the same controller-only screen mode.
+- Added a 90-degree CSS rotation fallback when Chrome cannot lock landscape orientation.
+- Ensured the game remains aspect-correct and covers the available viewport with all controls hidden.
+
 ## v0.2.4-prototype
 
 - Mapped the L2 trigger to toggle fullscreen on its press edge.

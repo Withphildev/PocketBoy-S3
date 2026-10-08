@@ -938,9 +938,8 @@ function pollPocketBoyGamepad() {
   const playerShell = document.querySelector('.screenCard');
   if (playerShell) {
     playerShell.classList.toggle('has-gamepad', !!gamepad);
-    if (pocketBoyGamepadConnected && !gamepad && document.fullscreenElement &&
-        document.exitFullscreen) {
-      document.exitFullscreen().catch(() => {});
+    if (pocketBoyGamepadConnected && !gamepad && window.PocketBoyFullscreen) {
+      window.PocketBoyFullscreen.exit();
     }
   }
   pocketBoyGamepadConnected = !!gamepad;
