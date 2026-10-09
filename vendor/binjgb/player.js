@@ -156,8 +156,10 @@ window.PocketBoyPlayer = {
     emulator.saveState();
     return true;
   },
-  loadState() {
+  async loadState() {
     if (!emulator || !localStorage.getItem(currentSaveKey + ':state')) return false;
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    if (!emulator) return false;
     emulator.loadState();
     return true;
   },
@@ -257,9 +259,11 @@ class Emulator {
     const buffer = makeWasmBuffer(
         this.module, this.module._get_file_data_ptr(fileDataPtr),
         this.module._get_file_data_size(fileDataPtr));
-    const result = cb(fileDataPtr, buffer);
-    this.module._file_data_delete(fileDataPtr);
-    return result;
+    try {
+      return cb(fileDataPtr, buffer);
+    } finally {
+      this.module._file_data_delete(fileDataPtr);
+    }
   }
 
   withNewExtRamFileData(cb) {
@@ -289,12 +293,34 @@ class Emulator {
   loadState() {
     const saveStateBuffer =
         new Uint8Array(JSON.parse(localStorage.getItem(currentSaveKey + ':state')));
-    this.withNewStateFileData((fileDataPtr, buffer) => {
-      if (buffer.byteLength === saveStateBuffer.byteLength) {
-        buffer.set(new Uint8Array(saveStateBuffer));
-        this.module._emulator_read_state(this.e, fileDataPtr);
-      }
-    });
+    const shouldResume = !this.isPaused;
+    if (shouldResume) this.cancelAnimationFrame();
+    clearInterval(this.rewindIntervalId);
+    this.rewindIntervalId = 0;
+    this.audio.resetTimeline();
+    try {
+      this.withNewStateFileData((fileDataPtr, buffer) => {
+        if (buffer.byteLength !== saveStateBuffer.byteLength) {
+          throw new Error('Save state is not compatible with this game.');
+        }
+        buffer.set(saveStateBuffer);
+        const result = this.module._emulator_read_state(this.e, fileDataPtr);
+        if (result !== undefined && result !== RESULT_OK) {
+          throw new Error('The emulator rejected this save state.');
+        }
+      });
+      this.rewind.destroy();
+      this.rewind = new Rewind(this.module, this.e);
+      this.lastRafSec = 0;
+      this.leftoverTicks = 0;
+      vm.ticks = this.ticks;
+      vm.rewind.minTicks = vm.ticks;
+      vm.rewind.maxTicks = vm.ticks;
+      this.video.uploadTexture();
+      this.video.renderTexture();
+    } finally {
+      if (shouldResume) this.requestAnimationFrame();
+    }
   }
 
   saveState() {
@@ -730,6 +756,16 @@ class Audio {
     Audio.ctx.resume();
   }
 
+  resetTimeline() {
+    for (const source of this.sources) {
+      source.onended = null;
+      try { source.stop(); } catch (error) {}
+      source.disconnect();
+    }
+    this.sources.clear();
+    this.startSec = 0;
+  }
+
   destroy() {
     if (this.boundStartPlayback) {
       window.removeEventListener('keydown',  this.boundStartPlayback, true);
@@ -737,12 +773,7 @@ class Audio {
       window.removeEventListener('touchend', this.boundStartPlayback, true);
       this.boundStartPlayback = null;
     }
-    for (const source of this.sources) {
-      source.onended = null;
-      try { source.stop(); } catch (error) {}
-      source.disconnect();
-    }
-    this.sources.clear();
+    this.resetTimeline();
     this.buffer = null;
     this.started = false;
   }

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.3.2-prototype
+
+- Fixed intermittent corruption when loading a save state immediately after reloading a game.
+- Loads state only after a browser-frame readiness barrier.
+- Pauses emulation while applying the state and resets frame, audio, and rewind timelines before resuming.
+- Validates save-state size and emulator acceptance before reporting success.
+- Guarantees temporary WASM save buffers are released even when loading fails.
+
 ## v0.3.1-prototype
 
 - Added explicit WebGL buffer, texture, shader, and program cleanup between games.
