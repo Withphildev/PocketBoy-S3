@@ -265,6 +265,9 @@ class Emulator {
   }
 
   withNewFileData(fileDataPtr, cb) {
+    if (!fileDataPtr) {
+      throw new Error('Emulator could not allocate save memory.');
+    }
     const buffer = makeWasmBuffer(
         this.module, this.module._get_file_data_ptr(fileDataPtr),
         this.module._get_file_data_size(fileDataPtr));
@@ -272,6 +275,7 @@ class Emulator {
       return cb(fileDataPtr, buffer);
     } finally {
       this.module._file_data_delete(fileDataPtr);
+      this.module._free(fileDataPtr);
     }
   }
 

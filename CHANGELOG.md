@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.3.4-prototype
+
+- Fixed an upstream binjgb `FileData` wrapper leak during state and cartridge-RAM operations.
+- Frees both the temporary save payload and its outer WASM allocation.
+- Rejects allocation failure instead of reading or writing an invalid save buffer.
+- Keeps the 1.5-second startup lock and atomic state-loading safeguards.
+
 ## v0.3.3-prototype
 
 - Locks Save State and Load State during the first 1.5 seconds after a ROM starts.
