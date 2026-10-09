@@ -11,6 +11,59 @@ constexpr size_t kMaxStoredBackupBytes = 420 * 1024;
 constexpr char kSaveBackupPath[] = "/pocketboy-saves.json";
 constexpr char kSaveUploadPath[] = "/pocketboy-saves.upload";
 constexpr char kSavePreviousPath[] = "/pocketboy-saves.previous";
+constexpr size_t kMaxStoredGameBytes = 1800 * 1024;
+constexpr char kGameUploadPath[] = "/.pocketboy-upload";
+
+String sanitizeGameName(String name) {
+    name.replace('\\', '/');
+    const int slash = name.lastIndexOf('/');
+    if (slash >= 0) name = name.substring(slash + 1);
+    String lower = name;
+    lower.toLowerCase();
+    String extension;
+    if (lower.endsWith(".gbc")) extension = ".gbc";
+    else if (lower.endsWith(".gb")) extension = ".gb";
+    else return "";
+
+    String stem = name.substring(0, name.length() - extension.length());
+    stem.trim();
+    String safe;
+    safe.reserve(64);
+    for (size_t i = 0; i < stem.length() && safe.length() < 54; ++i) {
+        const char c = stem[i];
+        const bool alphaNumeric = (c >= 'a' && c <= 'z') ||
+            (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+        if (alphaNumeric || c == ' ' || c == '-' || c == '_' || c == '(' || c == ')') {
+            safe += c;
+        } else {
+            safe += '_';
+        }
+    }
+    safe.trim();
+    if (safe.isEmpty()) safe = "game";
+    return safe + extension;
+}
+
+bool isValidGameName(const String &name) {
+    return !name.isEmpty() && sanitizeGameName(name) == name;
+}
+
+String jsonEscape(const String &value) {
+    String escaped;
+    escaped.reserve(value.length() + 8);
+    for (size_t i = 0; i < value.length(); ++i) {
+        const char c = value[i];
+        if (c == '\"' || c == '\\') {
+            escaped += '\\';
+            escaped += c;
+        } else if (static_cast<uint8_t>(c) < 0x20) {
+            escaped += '_';
+        } else {
+            escaped += c;
+        }
+    }
+    return escaped;
+}
 
 const char kPage[] PROGMEM = R"HTML(
 <!doctype html>
@@ -84,19 +137,26 @@ const char kPlayerPage[] PROGMEM = R"HTML(
 <meta name="theme-color" content="#10151f"><title>PocketBoy S3 Player</title><style>
 :root{color-scheme:dark;--ink:#f5f7ff;--muted:#aab4ca;--panel:#171d2b;--line:#303a51;--green:#67e3a5;--pink:#ff7096;--blue:#79aaff}
 *{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#090c13;color:var(--ink);font:15px system-ui,-apple-system,sans-serif}body{touch-action:manipulation;background:radial-gradient(circle at 50% 0,#29344e,#10151f 45%,#090c13)}
-main{width:min(880px,100%);margin:auto;padding:12px}.top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}.brand{font-size:22px;font-weight:950}.brand span{color:var(--green)}.toplinks{display:flex;align-items:center;gap:10px}.battery{color:var(--green);font-size:12px;font-weight:800}.battery.low{color:#ff6b7a}.battery.mid{color:#ffd166}.back{color:var(--muted);text-decoration:none}.shell{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:12px}.screenCard,.side{border:1px solid var(--line);border-radius:20px;background:#151a28dd;padding:12px}.screen{position:relative;display:grid;place-items:center;aspect-ratio:160/144;max-height:calc(100vh - 135px);margin:auto;border:8px solid #2b3345;border-radius:12px;background:#050607;overflow:hidden}.screen canvas{width:100%;height:100%;object-fit:contain;image-rendering:pixelated}.empty{position:absolute;text-align:center;color:var(--muted);padding:20px}.empty strong{display:block;color:var(--ink);font-size:20px;margin-bottom:6px}.controls{display:grid;gap:9px}.file{display:block;padding:13px;border-radius:13px;background:var(--green);color:#06150e;font-weight:900;text-align:center;cursor:pointer}.file input{display:none}button{border:0;border-radius:12px;padding:11px;background:#34405a;color:#fff;font:inherit;font-weight:800}button:disabled{opacity:.42;filter:saturate(.25)}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}.status{padding:10px;border-radius:12px;background:#0d111b;color:var(--muted);font-size:12px;overflow-wrap:anywhere}.status.connected{color:var(--green)}label.range{display:grid;gap:6px;color:var(--muted);font-size:12px}input[type=range]{width:100%}.note{color:var(--muted);font-size:12px;line-height:1.45}.touch{display:none;position:relative;height:210px;margin-top:10px;user-select:none;-webkit-user-select:none;touch-action:none}.dpad{position:absolute;left:8px;bottom:4px;width:170px;height:170px}.dpad div{position:absolute;background:#3d465d}.dpad:after{content:'';position:absolute;left:61px;top:61px;width:48px;height:48px;background:#3d465d}.left,.right{top:61px;width:61px;height:48px}.left{left:0;border-radius:10px 0 0 10px}.right{right:0;border-radius:0 10px 10px 0}.up,.down{left:61px;width:48px;height:61px}.up{top:0;border-radius:10px 10px 0 0}.down{bottom:0;border-radius:0 0 10px 10px}.roundBtn,.capsuleBtn{position:absolute;display:grid;place-items:center;background:var(--pink);font-weight:950}.roundBtn{width:66px;height:66px;border-radius:50%;font-size:24px}.capsuleBtn{width:66px;height:30px;border-radius:20px;background:#46516b;font-size:10px}.btnPressed{filter:brightness(1.6);transform:scale(.95)}#controller_a{right:9px;bottom:91px}#controller_b{right:88px;bottom:57px}#controller_start{right:8px;bottom:4px}#controller_select{right:83px;bottom:4px}
-@media(max-width:700px){.shell{grid-template-columns:1fr}.screen{max-height:none}.touch{display:block}.side{padding-bottom:8px}}@media(orientation:landscape) and (max-height:520px){main{width:100%;padding:6px}.top{margin:0 4px 5px}.shell{grid-template-columns:minmax(0,1fr) 230px}.screenCard{padding:6px}.screen{height:calc(100vh - 55px);width:auto}.touch{display:none}.side{padding:8px}.note{display:none}}
+main{width:min(880px,100%);margin:auto;padding:12px}.top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}.brand{font-size:22px;font-weight:950}.brand span{color:var(--green)}.toplinks{display:flex;align-items:center;gap:10px}.battery{color:var(--green);font-size:12px;font-weight:800}.battery.low{color:#ff6b7a}.battery.mid{color:#ffd166}.back{color:var(--muted);text-decoration:none}.shell{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:12px}.screenCard,.side{border:1px solid var(--line);border-radius:20px;background:#151a28dd;padding:12px}.screen{position:relative;display:grid;place-items:center;aspect-ratio:160/144;max-height:calc(100vh - 135px);margin:auto;border:8px solid #2b3345;border-radius:12px;background:#050607;overflow:hidden}.screen canvas{width:100%;height:100%;object-fit:contain;image-rendering:pixelated}.empty{position:absolute;text-align:center;color:var(--muted);padding:20px}.empty strong{display:block;color:var(--ink);font-size:20px;margin-bottom:6px}.controls{display:grid;gap:9px}.file{display:block;padding:13px;border-radius:13px;background:var(--green);color:#06150e;font-weight:900;text-align:center;cursor:pointer}.file input{display:none}button{border:0;border-radius:12px;padding:11px;background:#34405a;color:#fff;font:inherit;font-weight:800}button:disabled{opacity:.42;filter:saturate(.25)}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}.status{padding:10px;border-radius:12px;background:#0d111b;color:var(--muted);font-size:12px;overflow-wrap:anywhere}.status.connected{color:var(--green)}.library{display:grid;gap:6px;max-height:150px;overflow-y:auto}.libraryItem{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;align-items:center;padding:7px;border-radius:10px;background:#0d111b}.libraryName{min-width:0;color:var(--ink);font-size:12px;font-weight:800;overflow-wrap:anywhere}.librarySize{display:block;color:var(--muted);font-size:10px;font-weight:500}.libraryActions{display:flex;gap:5px}.libraryActions button{padding:7px 8px;border-radius:8px;font-size:11px}.libraryActions .deleteGame{background:#633342}label.range{display:grid;gap:6px;color:var(--muted);font-size:12px}input[type=range]{width:100%}.note{color:var(--muted);font-size:12px;line-height:1.45}.touch{display:none;position:relative;height:210px;margin-top:10px;user-select:none;-webkit-user-select:none;touch-action:none}.dpad{position:absolute;left:8px;bottom:4px;width:170px;height:170px}.dpad div{position:absolute;background:#3d465d}.dpad:after{content:'';position:absolute;left:61px;top:61px;width:48px;height:48px;background:#3d465d}.left,.right{top:61px;width:61px;height:48px}.left{left:0;border-radius:10px 0 0 10px}.right{right:0;border-radius:0 10px 10px 0}.up,.down{left:61px;width:48px;height:61px}.up{top:0;border-radius:10px 10px 0 0}.down{bottom:0;border-radius:0 0 10px 10px}.roundBtn,.capsuleBtn{position:absolute;display:grid;place-items:center;background:var(--pink);font-weight:950}.roundBtn{width:66px;height:66px;border-radius:50%;font-size:24px}.capsuleBtn{width:66px;height:30px;border-radius:20px;background:#46516b;font-size:10px}.btnPressed{filter:brightness(1.6);transform:scale(.95)}#controller_a{right:9px;bottom:91px}#controller_b{right:88px;bottom:57px}#controller_start{right:8px;bottom:4px}#controller_select{right:83px;bottom:4px}
+@media(max-width:700px){.shell{grid-template-columns:1fr}.screen{max-height:none}.touch{display:block}.side{padding-bottom:8px}}@media(orientation:landscape) and (max-height:520px){main{width:100%;padding:6px}.top{margin:0 4px 5px}.shell{grid-template-columns:minmax(0,1fr) 230px}.screenCard{padding:6px}.screen{height:calc(100vh - 55px);width:auto}.touch{display:none}.side{padding:8px;max-height:calc(100vh - 55px);overflow-y:auto}.note{display:none}}
 body.game-fullscreen{overflow:hidden}body.game-fullscreen .screen,.screen:fullscreen{position:fixed;z-index:9999;inset:0;display:block;width:100vw;height:100vh;max-height:none;aspect-ratio:auto;margin:0;border:0;border-radius:0;background:#000;overflow:hidden;transform:none}body.game-fullscreen .screen canvas,.screen:fullscreen canvas{display:block;width:100%;height:100%;object-fit:contain}body.game-fullscreen .touch{display:none}@supports(width:100dvw){body.game-fullscreen .screen,.screen:fullscreen{width:100dvw;height:100dvh}}@media(orientation:portrait){body.game-fullscreen .screen canvas,.screen:fullscreen canvas{position:absolute;left:50%;top:50%;width:100vh;height:100vw;max-width:none;max-height:none;transform:translate(-50%,-50%) rotate(90deg);transform-origin:center center}@supports(width:100dvw){body.game-fullscreen .screen canvas,.screen:fullscreen canvas{width:100dvh;height:100dvw}}}
 </style></head><body><main><header class="top"><div class="brand">Pocket<span>Boy</span> S3</div><div class="toplinks"><span id="batteryStatus" class="battery">Battery —</span><a class="back" href="/">Controller lab</a></div></header>
 <div class="shell"><section class="screenCard"><div class="screen"><canvas id="mainCanvas" width="160" height="144"></canvas><div id="empty" class="empty"><strong>Select a game</strong>Open one of your homebrew .gb or .gbc files from this phone.</div></div>
 <div id="controller" class="touch"><div id="controller_dpad" class="dpad"><div id="controller_left" class="left"></div><div id="controller_right" class="right"></div><div id="controller_up" class="up"></div><div id="controller_down" class="down"></div></div><div id="controller_select" class="capsuleBtn">Select</div><div id="controller_start" class="capsuleBtn">Start</div><div id="controller_b" class="roundBtn">B</div><div id="controller_a" class="roundBtn">A</div></div></section>
-<aside class="side"><div class="controls"><label class="file">Open .gb / .gbc<input id="rom" type="file" accept=".gb,.gbc,application/octet-stream"></label><div id="romName" class="status">No game loaded</div><div id="gamepadStatus" class="status">No controller detected</div><div class="row"><button type="button" id="sound">Sound On</button><button type="button" id="fullscreen">Enter fullscreen</button></div><div class="row"><button type="button" id="pause">Pause</button><button type="button" id="save" disabled>Save state</button></div><button type="button" id="load" disabled>Load state</button><div class="row"><button type="button" id="exportSaves">Export saves</button><button type="button" id="importSaves">Import saves</button></div><div class="row"><button type="button" id="syncS3">Sync to S3</button><button type="button" id="restoreS3">Restore S3</button></div><div id="s3SaveStatus" class="status">S3 save space: checking…</div><input id="saveBackupFile" type="file" accept=".json,application/json" hidden><label class="range">Volume<input id="volume" type="range" min="0" max="1" value="0.5" step="0.05"></label><p class="note">B/Circle controls Game Boy A; A/Cross controls Game Boy B. L2 toggles controller-only fullscreen. Manual export remains the safest backup before erasing flash.</p><div id="message" class="status">PocketBoy v0.5.0 ready. Choose a legally obtained homebrew ROM.</div></div></aside></div></main>
-<script src="/binjgb.js?v=050"></script><script src="/player.js?v=050"></script><script>
+<aside class="side"><div class="controls"><label class="file">Open .gb / .gbc<input id="rom" type="file" accept=".gb,.gbc,application/octet-stream"></label><div class="row"><button type="button" id="uploadGame">Upload game</button><button type="button" id="refreshGames">Refresh library</button></div><input id="gameUploadFile" type="file" accept=".gb,.gbc,application/octet-stream" hidden><div id="gameStorage" class="status">Game library: checking…</div><div id="gameLibrary" class="library"><div class="status">Loading games…</div></div><div id="romName" class="status">No game loaded</div><div id="gamepadStatus" class="status">No controller detected</div><div class="row"><button type="button" id="sound">Sound On</button><button type="button" id="fullscreen">Enter fullscreen</button></div><div class="row"><button type="button" id="pause">Pause</button><button type="button" id="save" disabled>Save state</button></div><button type="button" id="load" disabled>Load state</button><div class="row"><button type="button" id="exportSaves">Export saves</button><button type="button" id="importSaves">Import saves</button></div><div class="row"><button type="button" id="syncS3">Sync to S3</button><button type="button" id="restoreS3">Restore S3</button></div><div id="s3SaveStatus" class="status">S3 save space: checking…</div><input id="saveBackupFile" type="file" accept=".json,application/json" hidden><label class="range">Volume<input id="volume" type="range" min="0" max="1" value="0.5" step="0.05"></label><p class="note">Store legally obtained homebrew GB/GBC games on the S3. Manual save export remains the safest backup before erasing flash.</p><div id="message" class="status">PocketBoy v0.6.0 ready. Choose a game.</div></div></aside></div></main>
+<script src="/binjgb.js?v=060"></script><script src="/player.js?v=060"></script><script>
 const rom=document.getElementById('rom'),msg=document.getElementById('message'),empty=document.getElementById('empty'),saveButton=document.getElementById('save'),loadButton=document.getElementById('load');let stateUnlockTimer=0;
 function lockStateControls(){clearTimeout(stateUnlockTimer);saveButton.disabled=true;loadButton.disabled=true}
 function unlockStateControlsWhenReady(){const wait=PocketBoyPlayer.stateReadyInMs();if(wait===null)return;if(wait>0){stateUnlockTimer=setTimeout(unlockStateControlsWhenReady,wait+20);return}saveButton.disabled=false;loadButton.disabled=false;msg.textContent='Running. Save and Load are ready.'}
 const batteryStatus=document.getElementById('batteryStatus');async function refreshBattery(){const c=new AbortController(),timeout=setTimeout(()=>c.abort(),2500);try{const s=await fetch('/api/status',{cache:'no-store',signal:c.signal}).then(r=>r.json());if(s.batteryLevel<0){batteryStatus.textContent='Battery unavailable';batteryStatus.className='battery mid'}else{batteryStatus.textContent=s.batteryLevel+'%'+(s.charging?' ⚡':'');batteryStatus.className='battery '+(s.batteryLevel<=15?'low':s.batteryLevel<=35?'mid':'')}}catch(error){batteryStatus.textContent='Battery unavailable';batteryStatus.className='battery mid'}finally{clearTimeout(timeout);setTimeout(refreshBattery,5000)}}refreshBattery();
-rom.addEventListener('change',async()=>{const file=rom.files&&rom.files[0];if(!file)return;lockStateControls();if(!/\.(gb|gbc)$/i.test(file.name)){msg.textContent='Please choose a .gb or .gbc file.';return}try{msg.textContent='Loading '+file.name+'…';await PocketBoyPlayer.start(await file.arrayBuffer());document.getElementById('romName').textContent=file.name;empty.style.display='none';msg.textContent='Running. Save and Load unlock in 1.5 seconds.';unlockStateControlsWhenReady()}catch(error){console.error(error);msg.textContent='Could not start this ROM: '+error.message}});
+async function startRom(buffer,name){lockStateControls();try{msg.textContent='Loading '+name+'…';await PocketBoyPlayer.start(buffer);document.getElementById('romName').textContent=name;document.getElementById('pause').textContent='Pause';empty.style.display='none';msg.textContent='Running. Save and Load unlock in 1.5 seconds.';unlockStateControlsWhenReady()}catch(error){console.error(error);msg.textContent='Could not start this ROM: '+error.message}}
+rom.addEventListener('change',async()=>{const file=rom.files&&rom.files[0];if(!file)return;if(!/\.(gb|gbc)$/i.test(file.name)){msg.textContent='Please choose a .gb or .gbc file.';return}await startRom(await file.arrayBuffer(),file.name)});
+const gameUploadFile=document.getElementById('gameUploadFile'),gameLibrary=document.getElementById('gameLibrary'),gameStorage=document.getElementById('gameStorage');
+async function loadStoredGame(name){try{msg.textContent='Reading '+name+' from the S3…';const response=await fetch('/api/games/rom?name='+encodeURIComponent(name),{cache:'no-store'});if(!response.ok)throw new Error('The stored game could not be read.');await startRom(await response.arrayBuffer(),name)}catch(error){msg.textContent='Game load failed: '+error.message}}
+async function deleteStoredGame(name){if(!confirm('Delete '+name+' from the S3 game library? Its Chrome and S3 save backups will not be deleted.'))return;try{const response=await fetch('/api/games?name='+encodeURIComponent(name),{method:'DELETE'}),result=await response.json();if(!response.ok)throw new Error(result.error||'The game could not be deleted.');msg.textContent='Deleted '+name+' from the S3. Any save data was kept.';await refreshGameLibrary()}catch(error){msg.textContent='Delete failed: '+error.message}}
+function renderGameLibrary(status){gameLibrary.replaceChildren();const games=status.games||[];games.sort((a,b)=>a.name.localeCompare(b.name));if(!games.length){const item=document.createElement('div');item.className='status';item.textContent='No stored games yet.';gameLibrary.append(item);return}for(const game of games){const item=document.createElement('div');item.className='libraryItem';const label=document.createElement('div');label.className='libraryName';label.textContent=game.name;const size=document.createElement('span');size.className='librarySize';size.textContent=formatBytes(game.size);label.append(size);const actions=document.createElement('div');actions.className='libraryActions';const play=document.createElement('button');play.type='button';play.textContent='Play';play.onclick=()=>loadStoredGame(game.name);const del=document.createElement('button');del.type='button';del.textContent='Delete';del.className='deleteGame';del.onclick=()=>deleteStoredGame(game.name);actions.append(play,del);item.append(label,actions);gameLibrary.append(item)}}
+async function refreshGameLibrary(){try{const response=await fetch('/api/games',{cache:'no-store'}),status=await response.json();if(!response.ok||!status.ready)throw new Error('unavailable');gameStorage.textContent='Game library: '+formatBytes(status.usedBytes)+' used · '+formatBytes(status.freeBytes)+' free';renderGameLibrary(status);return status}catch(error){gameStorage.textContent='Game library unavailable';gameLibrary.replaceChildren();const item=document.createElement('div');item.className='status';item.textContent='Could not read stored games.';gameLibrary.append(item);return null}}
+document.getElementById('refreshGames').onclick=refreshGameLibrary;document.getElementById('uploadGame').onclick=()=>{gameUploadFile.value='';gameUploadFile.click()};gameUploadFile.onchange=async()=>{const file=gameUploadFile.files&&gameUploadFile.files[0];if(!file)return;try{if(!/\.(gb|gbc)$/i.test(file.name))throw new Error('Choose a .gb or .gbc file.');const status=await refreshGameLibrary();if(!status)throw new Error('Game storage is unavailable.');if(file.size>status.freeBytes)throw new Error('This game is larger than the available S3 space.');if(!confirm('Upload '+file.name+' ('+formatBytes(file.size)+') to the S3 game library?')){msg.textContent='Game upload cancelled.';return}msg.textContent='Uploading '+file.name+' to the S3…';const form=new FormData();form.append('game',file,file.name);const response=await fetch('/api/games',{method:'POST',body:form}),result=await response.json();if(!response.ok)throw new Error(result.error||'The S3 rejected this game.');msg.textContent='Added '+result.name+' to the S3 game library.';await refreshGameLibrary()}catch(error){msg.textContent='Game upload failed: '+error.message}};refreshGameLibrary();
 document.getElementById('pause').onclick=()=>{try{const paused=PocketBoyPlayer.togglePause();if(paused===null){msg.textContent='Load a game before using Pause.';return}document.getElementById('pause').textContent=paused?'Resume':'Pause';msg.textContent=paused?'Game paused.':'Game resumed.'}catch(error){msg.textContent='Pause failed: '+error.message}};
 saveButton.onclick=()=>{try{msg.textContent=PocketBoyPlayer.saveState()?'Save state stored in this browser.':'Save State is not ready yet.'}catch(error){msg.textContent='Save failed: '+error.message}};loadButton.onclick=async()=>{try{msg.textContent='Loading save state…';msg.textContent=await PocketBoyPlayer.loadState()?'Save state loaded.':'No compatible save state is ready for this game.'}catch(error){msg.textContent='Load failed: '+error.message}};document.getElementById('volume').oninput=e=>PocketBoyPlayer.setVolume(e.target.value);
 const backupFile=document.getElementById('saveBackupFile'),s3SaveStatus=document.getElementById('s3SaveStatus');
@@ -138,6 +198,8 @@ void WebPortal::begin() {
             saveFs_.remove(kSavePreviousPath);
         }
     }
+    gameStorageReady_ = gameFs_.begin(true, "/pbgames", 6, "games");
+    if (gameStorageReady_) gameFs_.remove(kGameUploadPath);
 
     WiFi.mode(WIFI_AP);
     WiFi.setSleep(true);
@@ -287,6 +349,169 @@ void WebPortal::finishSaveUpload() {
     server_.send(201, "application/json", json);
 }
 
+void WebPortal::sendGameLibrary() {
+    String json = "{\"ready\":" + String(gameStorageReady_ ? "true" : "false");
+    if (gameStorageReady_) {
+        const size_t totalBytes = gameFs_.totalBytes();
+        const size_t usedBytes = gameFs_.usedBytes();
+        json += ",\"usedBytes\":" + String(usedBytes);
+        json += ",\"totalBytes\":" + String(totalBytes);
+        json += ",\"freeBytes\":" + String(totalBytes > usedBytes ? totalBytes - usedBytes : 0);
+        json += ",\"maxGameBytes\":" + String(kMaxStoredGameBytes);
+        json += ",\"games\":[";
+        bool first = true;
+        File root = gameFs_.open("/");
+        if (root) {
+            File file = root.openNextFile();
+            while (file) {
+                String name = file.name();
+                if (name.startsWith("/")) name.remove(0, 1);
+                if (!file.isDirectory() && isValidGameName(name)) {
+                    if (!first) json += ',';
+                    first = false;
+                    json += "{\"name\":\"" + jsonEscape(name) + "\",\"size\":" + String(file.size()) + "}";
+                }
+                file.close();
+                file = root.openNextFile();
+            }
+            root.close();
+        }
+        json += ']';
+    }
+    json += '}';
+    server_.sendHeader("Cache-Control", "no-store");
+    server_.send(gameStorageReady_ ? 200 : 503, "application/json", json);
+}
+
+void WebPortal::sendStoredGame() {
+    if (!gameStorageReady_) {
+        server_.send(503, "application/json", "{\"error\":\"Game storage is unavailable.\"}");
+        return;
+    }
+    const String name = server_.arg("name");
+    if (!isValidGameName(name)) {
+        server_.send(400, "application/json", "{\"error\":\"Invalid game name.\"}");
+        return;
+    }
+    File file = gameFs_.open(String("/") + name, FILE_READ);
+    if (!file) {
+        server_.send(404, "application/json", "{\"error\":\"Game not found.\"}");
+        return;
+    }
+    server_.sendHeader("Cache-Control", "no-store");
+    server_.sendHeader("Content-Disposition", "attachment; filename=\"" + name + "\"");
+    server_.streamFile(file, "application/octet-stream");
+    file.close();
+}
+
+void WebPortal::handleGameUpload() {
+    HTTPUpload &upload = server_.upload();
+    if (upload.status == UPLOAD_FILE_START) {
+        gameUploadOk_ = gameStorageReady_;
+        gameUploadBytes_ = 0;
+        gameUploadName_ = sanitizeGameName(upload.filename);
+        gameUploadError_ = gameStorageReady_ ? "" : "Game storage is unavailable.";
+        gameUploadResponseCode_ = gameStorageReady_ ? 400 : 503;
+        if (gameUpload_) gameUpload_.close();
+        if (!gameStorageReady_) return;
+        if (gameUploadName_.isEmpty()) {
+            gameUploadOk_ = false;
+            gameUploadError_ = "Only .gb and .gbc files can be stored.";
+            return;
+        }
+        if (gameFs_.exists(String("/") + gameUploadName_)) {
+            gameUploadOk_ = false;
+            gameUploadError_ = "A game with this name already exists. Delete it before replacing it.";
+            gameUploadResponseCode_ = 409;
+            return;
+        }
+        gameFs_.remove(kGameUploadPath);
+        gameUpload_ = gameFs_.open(kGameUploadPath, FILE_WRITE);
+        if (!gameUpload_) {
+            gameUploadOk_ = false;
+            gameUploadError_ = "Could not create the temporary game file.";
+            gameUploadResponseCode_ = 507;
+        }
+    } else if (upload.status == UPLOAD_FILE_WRITE) {
+        if (!gameUploadOk_) return;
+        if (gameUploadBytes_ + upload.currentSize > kMaxStoredGameBytes) {
+            gameUploadOk_ = false;
+            gameUploadError_ = "This ROM is too large for the PocketBoy game library.";
+            gameUploadResponseCode_ = 413;
+            gameUpload_.close();
+            gameFs_.remove(kGameUploadPath);
+            return;
+        }
+        if (gameUpload_.write(upload.buf, upload.currentSize) != upload.currentSize) {
+            gameUploadOk_ = false;
+            gameUploadError_ = "There is not enough free game-library space.";
+            gameUploadResponseCode_ = 507;
+            gameUpload_.close();
+            gameFs_.remove(kGameUploadPath);
+            return;
+        }
+        gameUploadBytes_ += upload.currentSize;
+    } else if (upload.status == UPLOAD_FILE_END) {
+        if (gameUpload_) gameUpload_.close();
+        if (!gameUploadOk_ || gameUploadBytes_ == 0) {
+            if (gameUploadError_.isEmpty()) gameUploadError_ = "The uploaded game was empty.";
+            gameUploadOk_ = false;
+            gameFs_.remove(kGameUploadPath);
+            return;
+        }
+        if (!gameFs_.rename(kGameUploadPath, String("/") + gameUploadName_)) {
+            gameUploadOk_ = false;
+            gameUploadError_ = "The uploaded game could not be added to the library.";
+            gameUploadResponseCode_ = 500;
+            gameFs_.remove(kGameUploadPath);
+        }
+    } else if (upload.status == UPLOAD_FILE_ABORTED) {
+        if (gameUpload_) gameUpload_.close();
+        gameFs_.remove(kGameUploadPath);
+        gameUploadOk_ = false;
+        gameUploadError_ = "The game upload was interrupted.";
+        gameUploadResponseCode_ = 400;
+    }
+}
+
+void WebPortal::finishGameUpload() {
+    if (!gameUploadOk_) {
+        const String json = "{\"error\":\"" + jsonEscape(gameUploadError_) + "\"}";
+        server_.send(gameUploadResponseCode_, "application/json", json);
+        gameUploadBytes_ = 0;
+        return;
+    }
+    const String json = "{\"stored\":true,\"name\":\"" + jsonEscape(gameUploadName_) +
+        "\",\"size\":" + String(gameUploadBytes_) + "}";
+    gameUploadOk_ = false;
+    gameUploadBytes_ = 0;
+    server_.sendHeader("Cache-Control", "no-store");
+    server_.send(201, "application/json", json);
+}
+
+void WebPortal::deleteStoredGame() {
+    if (!gameStorageReady_) {
+        server_.send(503, "application/json", "{\"error\":\"Game storage is unavailable.\"}");
+        return;
+    }
+    const String name = server_.arg("name");
+    if (!isValidGameName(name)) {
+        server_.send(400, "application/json", "{\"error\":\"Invalid game name.\"}");
+        return;
+    }
+    const String path = String("/") + name;
+    if (!gameFs_.exists(path)) {
+        server_.send(404, "application/json", "{\"error\":\"Game not found.\"}");
+        return;
+    }
+    if (!gameFs_.remove(path)) {
+        server_.send(500, "application/json", "{\"error\":\"The game could not be deleted.\"}");
+        return;
+    }
+    server_.sendHeader("Cache-Control", "no-store");
+    server_.send(200, "application/json", "{\"deleted\":true}");
+}
+
 void WebPortal::configureRoutes() {
     server_.on("/", HTTP_GET, [this]() {
         server_.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate");
@@ -314,6 +539,12 @@ void WebPortal::configureRoutes() {
     server_.on("/api/saves/backup", HTTP_POST,
         [this]() { finishSaveUpload(); },
         [this]() { handleSaveUpload(); });
+    server_.on("/api/games", HTTP_GET, [this]() { sendGameLibrary(); });
+    server_.on("/api/games", HTTP_POST,
+        [this]() { finishGameUpload(); },
+        [this]() { handleGameUpload(); });
+    server_.on("/api/games", HTTP_DELETE, [this]() { deleteStoredGame(); });
+    server_.on("/api/games/rom", HTTP_GET, [this]() { sendStoredGame(); });
     server_.on("/generate_204", HTTP_GET, [this]() { server_.sendHeader("Location", "/", true); server_.send(302); });
     server_.on("/hotspot-detect.html", HTTP_GET, [this]() { server_.send_P(200, "text/html", kPage); });
     server_.on("/connecttest.txt", HTTP_GET, [this]() { server_.sendHeader("Location", "/", true); server_.send(302); });

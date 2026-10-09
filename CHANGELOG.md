@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.6.0-prototype
+
+- Added a StickS3-hosted homebrew GB/GBC game library.
+- Added WebUI controls to upload, refresh, launch, and delete stored games.
+- Shows used and available game-library space.
+- Sanitizes stored filenames, rejects duplicate names, and limits individual uploads to 1.8 MiB.
+- Uses a temporary upload file so interrupted transfers never appear in the library.
+- Keeps game storage separate from the 1 MiB save partition and preserves saves when a ROM is deleted.
+- Flushes pending battery RAM before switching games and resets Pause for the new session.
+
 ## v0.5.0-prototype
 
 - Added explicit Sync to S3 and Restore S3 controls to the player.

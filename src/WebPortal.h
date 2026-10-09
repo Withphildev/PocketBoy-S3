@@ -24,6 +24,14 @@ class WebPortal {
     bool saveUploadOk_ = false;
     size_t saveUploadBytes_ = 0;
     String saveUploadError_;
+    fs::LittleFSFS gameFs_;
+    File gameUpload_;
+    bool gameStorageReady_ = false;
+    bool gameUploadOk_ = false;
+    size_t gameUploadBytes_ = 0;
+    String gameUploadName_;
+    String gameUploadError_;
+    int gameUploadResponseCode_ = 500;
 
     void configureRoutes();
     void sendStatus();
@@ -31,4 +39,9 @@ class WebPortal {
     void sendSaveBackup();
     void handleSaveUpload();
     void finishSaveUpload();
+    void sendGameLibrary();
+    void sendStoredGame();
+    void handleGameUpload();
+    void finishGameUpload();
+    void deleteStoredGame();
 };

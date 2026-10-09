@@ -257,12 +257,17 @@ function parseSaveBackup(text) {
 
 window.PocketBoyPlayer = {
   async start(romBuffer) {
+    if (emulator && vm.extRamUpdated) {
+      vm.updateExtRam();
+      vm.extRamUpdated = false;
+    }
     stateControlsReadyAt = Infinity;
     const bytes = new Uint8Array(romBuffer);
     currentSaveKey = 'pocketboy:' + romFingerprint(bytes);
     const saved = localStorage.getItem(currentSaveKey + ':extram');
     const extRam = saved ? new Uint8Array(JSON.parse(saved)) : new Uint8Array();
     Emulator.start(await binjgbPromise, romBuffer, extRam);
+    vm.paused_ = false;
     emulator.setBuiltinPalette(vm.palIdx);
     stateControlsReadyAt = performance.now() + STATE_CONTROL_DELAY_MS;
     return currentSaveKey;
