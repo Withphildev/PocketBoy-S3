@@ -1,16 +1,17 @@
 #include <Arduino.h>
 #include <M5Unified.h>
 
+#include "EmbeddedAssets.generated.h"
 #include "WebPortal.h"
 
 namespace {
-constexpr char kVersion[] = "v0.2.8-prototype";
+constexpr char kVersion[] = "v0.2.9-prototype";
 constexpr uint8_t kFacePin = 11;
 constexpr uint8_t kM5Pin = 12;
 constexpr uint8_t kNormalBrightness = 80;
 constexpr uint8_t kDimBrightness = 12;
 constexpr uint32_t kDimAfterMs = 30000;
-constexpr uint32_t kMinimumSplashMs = 1500;
+constexpr uint32_t kMinimumSplashMs = 2500;
 
 WebPortal portal;
 bool showingQr = false;
@@ -25,36 +26,10 @@ bool pressed(uint8_t pin) {
     return true;
 }
 
-void drawSplash(uint8_t progress) {
+void drawSplash() {
     auto &d = M5.Display;
-    constexpr uint16_t kDeepGreen = 0x0208;
-    constexpr uint16_t kPanel = 0x18E3;
     d.fillScreen(TFT_BLACK);
-    d.fillRoundRect(7, 7, 226, 121, 13, kPanel);
-    d.drawRoundRect(7, 7, 226, 121, 13, TFT_GREEN);
-    d.drawRoundRect(11, 11, 218, 113, 10, kDeepGreen);
-
-    d.setTextDatum(middle_center);
-    d.setTextSize(2);
-    d.setTextColor(TFT_WHITE, kPanel);
-    d.drawString("POCKET", 78, 43);
-    d.setTextColor(TFT_GREEN, kPanel);
-    d.drawString("BOY", 151, 43);
-    d.setTextColor(TFT_YELLOW, kPanel);
-    d.drawString("S3", 202, 43);
-
-    d.setTextSize(1);
-    d.setTextColor(TFT_LIGHTGREY, kPanel);
-    d.drawString("GAME BOY + GAME BOY COLOR", 120, 70);
-    d.setTextColor(TFT_DARKGREY, kPanel);
-    d.drawString(kVersion, 120, 88);
-
-    for (uint8_t i = 0; i < 3; ++i) {
-        const int32_t x = 88 + (i * 25);
-        d.drawRoundRect(x, 104, 16, 7, 2, TFT_DARKGREEN);
-        if (i < progress) d.fillRoundRect(x + 2, 106, 12, 3, 1, TFT_GREEN);
-    }
-    d.setTextDatum(top_left);
+    d.drawJpg(kSplashJpg, kSplashJpgSize, 0, 0);
 }
 
 void drawStatus() {
@@ -134,12 +109,11 @@ void setup() {
     M5.Display.setRotation(3);
     M5.Display.setBrightness(kNormalBrightness);
     const uint32_t splashStartedAt = millis();
-    drawSplash(1);
+    drawSplash();
     M5.Power.setExtOutput(false);
     pinMode(kFacePin, INPUT_PULLUP);
     pinMode(kM5Pin, INPUT_PULLUP);
     portal.begin();
-    drawSplash(3);
     const uint32_t splashElapsed = millis() - splashStartedAt;
     if (splashElapsed < kMinimumSplashMs) delay(kMinimumSplashMs - splashElapsed);
     lastInteractionAt = millis();

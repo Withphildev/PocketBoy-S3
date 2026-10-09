@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.9-prototype
+
+- Replaced the temporary drawn boot screen with the gray-handheld PocketBoy artwork.
+- Optimized the artwork for the StickS3's native 240×135 landscape display.
+- Matched the other Pocket app's 2.5-second splash duration.
+
 ## v0.2.8-prototype
 
 - Added a PocketBoy S3 boot splash to the StickS3 display.

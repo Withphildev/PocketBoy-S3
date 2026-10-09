@@ -8,6 +8,7 @@ assets = (
     ("kBinjgbJs", project_dir / "vendor" / "binjgb" / "binjgb.js"),
     ("kPlayerJs", project_dir / "vendor" / "binjgb" / "player.js"),
     ("kBinjgbWasm", project_dir / "vendor" / "binjgb" / "binjgb.wasm"),
+    ("kSplashJpg", project_dir / "assets" / "pocketboy_splash.jpg"),
 )
 
 lines = [
