@@ -5,19 +5,23 @@
 #include "WebPortal.h"
 
 namespace {
-constexpr char kVersion[] = "v0.2.9-prototype";
+constexpr char kVersion[] = "v0.3.0-prototype";
 constexpr uint8_t kFacePin = 11;
 constexpr uint8_t kM5Pin = 12;
 constexpr uint8_t kNormalBrightness = 80;
 constexpr uint8_t kDimBrightness = 12;
 constexpr uint32_t kDimAfterMs = 30000;
 constexpr uint32_t kMinimumSplashMs = 2500;
+constexpr uint32_t kBatteryRefreshMs = 5000;
 
 WebPortal portal;
 bool showingQr = false;
 bool dimmed = false;
 uint32_t lastInteractionAt = 0;
 uint32_t lastClientCount = UINT32_MAX;
+uint32_t lastBatteryRefreshAt = 0;
+int32_t batteryLevel = -1;
+bool batteryCharging = false;
 
 bool pressed(uint8_t pin) {
     static uint32_t lastPress[49] = {};
@@ -32,6 +36,35 @@ void drawSplash() {
     d.drawJpg(kSplashJpg, kSplashJpgSize, 0, 0);
 }
 
+bool updateBatteryState() {
+    const int32_t measuredLevel = M5.Power.getBatteryLevel();
+    const int32_t nextLevel = measuredLevel < 0 ? -1 : constrain(measuredLevel, 0L, 100L);
+    const bool nextCharging = M5.Power.isCharging() == m5::Power_Class::is_charging;
+    const bool changed = nextLevel != batteryLevel || nextCharging != batteryCharging;
+    batteryLevel = nextLevel;
+    batteryCharging = nextCharging;
+    return changed;
+}
+
+void drawBatteryIndicator() {
+    auto &d = M5.Display;
+    const uint16_t color = batteryLevel < 0 ? TFT_DARKGREY
+        : batteryLevel <= 15 ? TFT_RED
+        : batteryLevel <= 35 ? TFT_YELLOW
+        : TFT_GREEN;
+    d.setTextSize(1);
+    d.setTextColor(color, TFT_BLACK);
+    d.setCursor(174, 8);
+    if (batteryLevel < 0) d.print("--%"); else d.printf("%ld%%", static_cast<long>(batteryLevel));
+    if (batteryCharging) d.print("+");
+    d.drawRect(211, 6, 20, 12, color);
+    d.fillRect(231, 9, 3, 6, color);
+    if (batteryLevel > 0) {
+        const int32_t fillWidth = (16 * batteryLevel + 99) / 100;
+        d.fillRect(213, 8, fillWidth, 8, color);
+    }
+}
+
 void drawStatus() {
     auto &d = M5.Display;
     d.fillScreen(TFT_BLACK);
@@ -39,6 +72,7 @@ void drawStatus() {
     d.setTextSize(2);
     d.setCursor(6, 4);
     d.println("PocketBoy S3");
+    drawBatteryIndicator();
 
     d.setTextSize(1);
     d.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -117,6 +151,8 @@ void setup() {
     const uint32_t splashElapsed = millis() - splashStartedAt;
     if (splashElapsed < kMinimumSplashMs) delay(kMinimumSplashMs - splashElapsed);
     lastInteractionAt = millis();
+    lastBatteryRefreshAt = millis();
+    updateBatteryState();
     drawStatus();
 }
 
@@ -137,6 +173,10 @@ void loop() {
     if (clients != lastClientCount) {
         lastClientCount = clients;
         if (!showingQr && !dimmed) drawStatus();
+    }
+    if (now - lastBatteryRefreshAt >= kBatteryRefreshMs) {
+        lastBatteryRefreshAt = now;
+        if (updateBatteryState() && !showingQr && !dimmed) drawStatus();
     }
     if (!dimmed && now - lastInteractionAt >= kDimAfterMs) {
         dimmed = true;

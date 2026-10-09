@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.3.0-prototype
+
+- Added a color-coded battery gauge to the StickS3 status screen.
+- Added live battery percentage, voltage, and charging state to the controller lab.
+- Added a compact live battery indicator to the game player.
+- Refreshes battery information every five seconds without interrupting gameplay.
+
 ## v0.2.9-prototype
 
 - Replaced the temporary drawn boot screen with the gray-handheld PocketBoy artwork.
