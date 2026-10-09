@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.4.0-prototype
+
+- Added one-file export for every PocketBoy battery save and save state in Chrome.
+- Added checksum validation and ROM-aware import with duplicate and size checks.
+- Validates the complete backup before writing and rolls back matching entries if storage fails.
+- Merges imported entries without deleting saves for unrelated games.
+- Closes the current game after import so it cannot overwrite newly restored battery data.
+
 ## v0.3.4-prototype
 
 - Fixed an upstream binjgb `FileData` wrapper leak during state and cartridge-RAM operations.

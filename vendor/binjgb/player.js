@@ -66,6 +66,12 @@ let emulator = null;
 let currentSaveKey = 'pocketboy:unspecified';
 let stateControlsReadyAt = Infinity;
 const STATE_CONTROL_DELAY_MS = 1500;
+const SAVE_BACKUP_FORMAT = 'pocketboy-save-backup';
+const SAVE_BACKUP_VERSION = 1;
+const SAVE_KEY_PATTERN = /^pocketboy:([0-9a-f]{8}-\d+):(extram|state)$/;
+const MAX_BACKUP_ENTRIES = 512;
+const MAX_BACKUP_DATA_BYTES = 16 * 1024 * 1024;
+const MAX_BACKUP_JSON_BYTES = 64 * 1024 * 1024;
 
 const controllerEl = $('#controller');
 const dpadEl = $('#controller_dpad');
@@ -136,6 +142,119 @@ function romFingerprint(bytes) {
   return (hash >>> 0).toString(16).padStart(8, '0') + '-' + bytes.length;
 }
 
+function updateFnv1a(hash, value) {
+  hash ^= value;
+  return Math.imul(hash, 0x01000193);
+}
+
+function saveEntryChecksum(romId, kind, bytes) {
+  let hash = 0x811c9dc5;
+  const metadata = romId + ':' + kind + ':';
+  for (let i = 0; i < metadata.length; i++) {
+    hash = updateFnv1a(hash, metadata.charCodeAt(i));
+  }
+  for (let i = 0; i < bytes.length; i++) {
+    hash = updateFnv1a(hash, bytes[i]);
+  }
+  return 'fnv1a32-' + (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function parseSaveBytes(value, label) {
+  let data = value;
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data);
+    } catch (error) {
+      throw new Error(label + ' is not valid save data.');
+    }
+  }
+  if (!Array.isArray(data)) {
+    throw new Error(label + ' must contain a byte array.');
+  }
+  const bytes = new Uint8Array(data.length);
+  for (let i = 0; i < data.length; i++) {
+    if (!Number.isInteger(data[i]) || data[i] < 0 || data[i] > 255) {
+      throw new Error(label + ' contains an invalid byte.');
+    }
+    bytes[i] = data[i];
+  }
+  return bytes;
+}
+
+function collectSaveEntries() {
+  const entries = [];
+  let totalBytes = 0;
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    const match = key && key.match(SAVE_KEY_PATTERN);
+    if (!match) continue;
+    const bytes = parseSaveBytes(localStorage.getItem(key), key);
+    totalBytes += bytes.byteLength;
+    if (entries.length >= MAX_BACKUP_ENTRIES ||
+        totalBytes > MAX_BACKUP_DATA_BYTES) {
+      throw new Error('The saved data is too large for one backup file.');
+    }
+    entries.push({
+      romId: match[1],
+      kind: match[2],
+      bytes: Array.from(bytes),
+      checksum: saveEntryChecksum(match[1], match[2], bytes),
+    });
+  }
+  entries.sort((a, b) =>
+    (a.romId + ':' + a.kind).localeCompare(b.romId + ':' + b.kind));
+  return entries;
+}
+
+function parseSaveBackup(text) {
+  if (typeof text !== 'string' || text.length > MAX_BACKUP_JSON_BYTES) {
+    throw new Error('The backup file is too large.');
+  }
+  let backup;
+  try {
+    backup = JSON.parse(text);
+  } catch (error) {
+    throw new Error('This is not a valid PocketBoy backup file.');
+  }
+  if (!backup || backup.format !== SAVE_BACKUP_FORMAT ||
+      backup.version !== SAVE_BACKUP_VERSION || !Array.isArray(backup.entries)) {
+    throw new Error('This backup format is not supported.');
+  }
+  if (backup.entries.length > MAX_BACKUP_ENTRIES) {
+    throw new Error('The backup contains too many save entries.');
+  }
+  const entries = [];
+  const seen = new Set();
+  let totalBytes = 0;
+  for (let i = 0; i < backup.entries.length; i++) {
+    const entry = backup.entries[i];
+    if (!entry || typeof entry.romId !== 'string' ||
+        !/^[0-9a-f]{8}-\d+$/.test(entry.romId) ||
+        (entry.kind !== 'extram' && entry.kind !== 'state')) {
+      throw new Error('Backup entry ' + (i + 1) + ' has invalid ROM information.');
+    }
+    const key = 'pocketboy:' + entry.romId + ':' + entry.kind;
+    if (seen.has(key)) {
+      throw new Error('The backup contains a duplicate save entry.');
+    }
+    seen.add(key);
+    const bytes = parseSaveBytes(entry.bytes, 'Backup entry ' + (i + 1));
+    totalBytes += bytes.byteLength;
+    if (totalBytes > MAX_BACKUP_DATA_BYTES) {
+      throw new Error('The backup contains too much save data.');
+    }
+    if (entry.checksum !== saveEntryChecksum(entry.romId, entry.kind, bytes)) {
+      throw new Error('Backup entry ' + (i + 1) + ' failed its checksum.');
+    }
+    entries.push({key, bytes});
+  }
+  return {
+    entries,
+    createdAt: typeof backup.createdAt === 'string' ? backup.createdAt : '',
+    romCount: new Set(entries.map(entry => entry.key.split(':')[1])).size,
+  };
+}
+
 window.PocketBoyPlayer = {
   async start(romBuffer) {
     stateControlsReadyAt = Infinity;
@@ -189,6 +308,53 @@ window.PocketBoyPlayer = {
   },
   soundEnabled() { return vm.soundEnabled; },
   hasGame() { return !!emulator; },
+  exportSaveBackup() {
+    if (emulator) vm.updateExtRam();
+    const entries = collectSaveEntries();
+    const createdAt = new Date().toISOString();
+    return {
+      entryCount: entries.length,
+      romCount: new Set(entries.map(entry => entry.romId)).size,
+      filename: 'pocketboy-saves-' + createdAt.slice(0, 10) + '.json',
+      text: JSON.stringify({
+        format: SAVE_BACKUP_FORMAT,
+        version: SAVE_BACKUP_VERSION,
+        createdAt,
+        entries,
+      }),
+    };
+  },
+  inspectSaveBackup(text) {
+    const backup = parseSaveBackup(text);
+    return {
+      entryCount: backup.entries.length,
+      romCount: backup.romCount,
+      createdAt: backup.createdAt,
+    };
+  },
+  importSaveBackup(text) {
+    const backup = parseSaveBackup(text);
+    const previous = backup.entries.map(entry => ({
+      key: entry.key,
+      value: localStorage.getItem(entry.key),
+    }));
+    try {
+      for (const entry of backup.entries) {
+        localStorage.setItem(entry.key, JSON.stringify(Array.from(entry.bytes)));
+      }
+    } catch (error) {
+      for (const item of previous) {
+        if (item.value === null) localStorage.removeItem(item.key);
+        else localStorage.setItem(item.key, item.value);
+      }
+      throw new Error('Chrome could not store the backup: ' + error.message);
+    }
+    vm.extRamUpdated = false;
+    Emulator.stop();
+    currentSaveKey = 'pocketboy:unspecified';
+    stateControlsReadyAt = Infinity;
+    return {entryCount: backup.entries.length, romCount: backup.romCount};
+  },
 };
 
 
