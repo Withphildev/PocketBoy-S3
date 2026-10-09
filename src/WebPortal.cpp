@@ -7,6 +7,10 @@
 
 namespace {
 constexpr uint16_t kDnsPort = 53;
+constexpr size_t kMaxStoredBackupBytes = 420 * 1024;
+constexpr char kSaveBackupPath[] = "/pocketboy-saves.json";
+constexpr char kSaveUploadPath[] = "/pocketboy-saves.upload";
+constexpr char kSavePreviousPath[] = "/pocketboy-saves.previous";
 
 const char kPage[] PROGMEM = R"HTML(
 <!doctype html>
@@ -86,8 +90,8 @@ body.game-fullscreen{overflow:hidden}body.game-fullscreen .screen,.screen:fullsc
 </style></head><body><main><header class="top"><div class="brand">Pocket<span>Boy</span> S3</div><div class="toplinks"><span id="batteryStatus" class="battery">Battery —</span><a class="back" href="/">Controller lab</a></div></header>
 <div class="shell"><section class="screenCard"><div class="screen"><canvas id="mainCanvas" width="160" height="144"></canvas><div id="empty" class="empty"><strong>Select a game</strong>Open one of your homebrew .gb or .gbc files from this phone.</div></div>
 <div id="controller" class="touch"><div id="controller_dpad" class="dpad"><div id="controller_left" class="left"></div><div id="controller_right" class="right"></div><div id="controller_up" class="up"></div><div id="controller_down" class="down"></div></div><div id="controller_select" class="capsuleBtn">Select</div><div id="controller_start" class="capsuleBtn">Start</div><div id="controller_b" class="roundBtn">B</div><div id="controller_a" class="roundBtn">A</div></div></section>
-<aside class="side"><div class="controls"><label class="file">Open .gb / .gbc<input id="rom" type="file" accept=".gb,.gbc,application/octet-stream"></label><div id="romName" class="status">No game loaded</div><div id="gamepadStatus" class="status">No controller detected</div><div class="row"><button type="button" id="sound">Sound On</button><button type="button" id="fullscreen">Enter fullscreen</button></div><div class="row"><button type="button" id="pause">Pause</button><button type="button" id="save" disabled>Save state</button></div><button type="button" id="load" disabled>Load state</button><div class="row"><button type="button" id="exportSaves">Export saves</button><button type="button" id="importSaves">Import saves</button></div><input id="saveBackupFile" type="file" accept=".json,application/json" hidden><label class="range">Volume<input id="volume" type="range" min="0" max="1" value="0.5" step="0.05"></label><p class="note">B/Circle controls Game Boy A; A/Cross controls Game Boy B. L2 toggles controller-only fullscreen. Export Saves backs up every game in Chrome.</p><div id="message" class="status">PocketBoy v0.4.0 ready. Choose a legally obtained homebrew ROM.</div></div></aside></div></main>
-<script src="/binjgb.js?v=040"></script><script src="/player.js?v=040"></script><script>
+<aside class="side"><div class="controls"><label class="file">Open .gb / .gbc<input id="rom" type="file" accept=".gb,.gbc,application/octet-stream"></label><div id="romName" class="status">No game loaded</div><div id="gamepadStatus" class="status">No controller detected</div><div class="row"><button type="button" id="sound">Sound On</button><button type="button" id="fullscreen">Enter fullscreen</button></div><div class="row"><button type="button" id="pause">Pause</button><button type="button" id="save" disabled>Save state</button></div><button type="button" id="load" disabled>Load state</button><div class="row"><button type="button" id="exportSaves">Export saves</button><button type="button" id="importSaves">Import saves</button></div><div class="row"><button type="button" id="syncS3">Sync to S3</button><button type="button" id="restoreS3">Restore S3</button></div><div id="s3SaveStatus" class="status">S3 save space: checking…</div><input id="saveBackupFile" type="file" accept=".json,application/json" hidden><label class="range">Volume<input id="volume" type="range" min="0" max="1" value="0.5" step="0.05"></label><p class="note">B/Circle controls Game Boy A; A/Cross controls Game Boy B. L2 toggles controller-only fullscreen. Manual export remains the safest backup before erasing flash.</p><div id="message" class="status">PocketBoy v0.5.0 ready. Choose a legally obtained homebrew ROM.</div></div></aside></div></main>
+<script src="/binjgb.js?v=050"></script><script src="/player.js?v=050"></script><script>
 const rom=document.getElementById('rom'),msg=document.getElementById('message'),empty=document.getElementById('empty'),saveButton=document.getElementById('save'),loadButton=document.getElementById('load');let stateUnlockTimer=0;
 function lockStateControls(){clearTimeout(stateUnlockTimer);saveButton.disabled=true;loadButton.disabled=true}
 function unlockStateControlsWhenReady(){const wait=PocketBoyPlayer.stateReadyInMs();if(wait===null)return;if(wait>0){stateUnlockTimer=setTimeout(unlockStateControlsWhenReady,wait+20);return}saveButton.disabled=false;loadButton.disabled=false;msg.textContent='Running. Save and Load are ready.'}
@@ -95,7 +99,17 @@ const batteryStatus=document.getElementById('batteryStatus');async function refr
 rom.addEventListener('change',async()=>{const file=rom.files&&rom.files[0];if(!file)return;lockStateControls();if(!/\.(gb|gbc)$/i.test(file.name)){msg.textContent='Please choose a .gb or .gbc file.';return}try{msg.textContent='Loading '+file.name+'…';await PocketBoyPlayer.start(await file.arrayBuffer());document.getElementById('romName').textContent=file.name;empty.style.display='none';msg.textContent='Running. Save and Load unlock in 1.5 seconds.';unlockStateControlsWhenReady()}catch(error){console.error(error);msg.textContent='Could not start this ROM: '+error.message}});
 document.getElementById('pause').onclick=()=>{try{const paused=PocketBoyPlayer.togglePause();if(paused===null){msg.textContent='Load a game before using Pause.';return}document.getElementById('pause').textContent=paused?'Resume':'Pause';msg.textContent=paused?'Game paused.':'Game resumed.'}catch(error){msg.textContent='Pause failed: '+error.message}};
 saveButton.onclick=()=>{try{msg.textContent=PocketBoyPlayer.saveState()?'Save state stored in this browser.':'Save State is not ready yet.'}catch(error){msg.textContent='Save failed: '+error.message}};loadButton.onclick=async()=>{try{msg.textContent='Loading save state…';msg.textContent=await PocketBoyPlayer.loadState()?'Save state loaded.':'No compatible save state is ready for this game.'}catch(error){msg.textContent='Load failed: '+error.message}};document.getElementById('volume').oninput=e=>PocketBoyPlayer.setVolume(e.target.value);
-const backupFile=document.getElementById('saveBackupFile');document.getElementById('exportSaves').onclick=()=>{try{const backup=PocketBoyPlayer.exportSaveBackup();if(!backup.entryCount){msg.textContent='There are no PocketBoy saves to export yet.';return}const url=URL.createObjectURL(new Blob([backup.text],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download=backup.filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);msg.textContent='Exported '+backup.entryCount+' save records for '+backup.romCount+' games.'}catch(error){msg.textContent='Export failed: '+error.message}};document.getElementById('importSaves').onclick=()=>{backupFile.value='';backupFile.click()};backupFile.onchange=async()=>{const file=backupFile.files&&backupFile.files[0];if(!file)return;try{if(file.size>64*1024*1024)throw new Error('The backup file is too large.');const text=await file.text(),info=PocketBoyPlayer.inspectSaveBackup(text);if(!confirm('Import '+info.entryCount+' save records for '+info.romCount+' games? Matching saves in Chrome will be replaced and the current game will close.')){msg.textContent='Save import cancelled.';return}const result=PocketBoyPlayer.importSaveBackup(text);lockStateControls();rom.value='';document.getElementById('romName').textContent='No game loaded';document.getElementById('pause').textContent='Pause';empty.style.display='block';msg.textContent='Imported '+result.entryCount+' save records for '+result.romCount+' games. Reopen a ROM to use them.'}catch(error){msg.textContent='Import failed: '+error.message}};
+const backupFile=document.getElementById('saveBackupFile'),s3SaveStatus=document.getElementById('s3SaveStatus');
+function resetAfterSaveImport(){lockStateControls();rom.value='';document.getElementById('romName').textContent='No game loaded';document.getElementById('pause').textContent='Pause';empty.style.display='block'}
+function importBackupText(text,source){const info=PocketBoyPlayer.inspectSaveBackup(text);if(!confirm('Restore '+info.entryCount+' save records for '+info.romCount+' games from '+source+'? Matching saves in Chrome will be replaced and the current game will close.'))return null;const result=PocketBoyPlayer.importSaveBackup(text);resetAfterSaveImport();return result}
+function formatBytes(value){if(value<1024)return value+' B';return(value/1024).toFixed(value<10240?1:0)+' KiB'}
+async function makeS3BackupBlob(text){if(typeof CompressionStream==='undefined')return new Blob([text],{type:'application/json'});const stream=new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'));return await new Response(stream).blob()}
+async function readS3Backup(response){const data=await response.arrayBuffer(),bytes=new Uint8Array(data);if(bytes.length>1&&bytes[0]===0x1f&&bytes[1]===0x8b){if(typeof DecompressionStream==='undefined')throw new Error('This Chrome version cannot decompress the S3 backup.');const stream=new Blob([data]).stream().pipeThrough(new DecompressionStream('gzip'));return await new Response(stream).text()}return new TextDecoder().decode(bytes)}
+async function refreshS3SaveStatus(){try{const response=await fetch('/api/saves',{cache:'no-store'}),status=await response.json();if(!response.ok||!status.ready)throw new Error('unavailable');s3SaveStatus.textContent=status.hasBackup?'S3 backup: '+formatBytes(status.backupSize)+' · '+formatBytes(status.usedBytes)+' of '+formatBytes(status.totalBytes)+' used':'S3 backup: empty · '+formatBytes(status.totalBytes)+' reserved';return status}catch(error){s3SaveStatus.textContent='S3 save space unavailable';return null}}
+document.getElementById('exportSaves').onclick=()=>{try{const backup=PocketBoyPlayer.exportSaveBackup();if(!backup.entryCount){msg.textContent='There are no PocketBoy saves to export yet.';return}const url=URL.createObjectURL(new Blob([backup.text],{type:'application/json'})),link=document.createElement('a');link.href=url;link.download=backup.filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);msg.textContent='Exported '+backup.entryCount+' save records for '+backup.romCount+' games.'}catch(error){msg.textContent='Export failed: '+error.message}};
+document.getElementById('importSaves').onclick=()=>{backupFile.value='';backupFile.click()};backupFile.onchange=async()=>{const file=backupFile.files&&backupFile.files[0];if(!file)return;try{if(file.size>64*1024*1024)throw new Error('The backup file is too large.');const result=importBackupText(await file.text(),'this file');msg.textContent=result?'Imported '+result.entryCount+' save records for '+result.romCount+' games. Reopen a ROM to use them.':'Save import cancelled.'}catch(error){msg.textContent='Import failed: '+error.message}};
+document.getElementById('syncS3').onclick=async()=>{try{const backup=PocketBoyPlayer.exportSaveBackup();if(!backup.entryCount){msg.textContent='There are no PocketBoy saves to sync yet.';return}const payload=await makeS3BackupBlob(backup.text),status=await refreshS3SaveStatus();if(!status)throw new Error('S3 save space is unavailable.');if(payload.size>status.maxBackupBytes)throw new Error('The compressed backup is '+formatBytes(payload.size)+'; the safe S3 limit is '+formatBytes(status.maxBackupBytes)+'.');if(!confirm('Store '+backup.entryCount+' save records for '+backup.romCount+' games on the S3? This replaces its previous backup.')){msg.textContent='S3 sync cancelled.';return}msg.textContent='Syncing saves to the S3…';const form=new FormData();form.append('backup',payload,backup.filename+(payload.type==='application/json'?'':'.gz'));const response=await fetch('/api/saves/backup',{method:'POST',body:form}),result=await response.json();if(!response.ok)throw new Error(result.error||'The S3 rejected the backup.');msg.textContent='Synced '+backup.entryCount+' save records to the S3 ('+formatBytes(payload.size)+').';await refreshS3SaveStatus()}catch(error){msg.textContent='S3 sync failed: '+error.message}};
+document.getElementById('restoreS3').onclick=async()=>{try{const status=await refreshS3SaveStatus();if(!status||!status.hasBackup){msg.textContent='There is no backup stored on the S3 yet.';return}msg.textContent='Reading the S3 backup…';const response=await fetch('/api/saves/backup',{cache:'no-store'});if(!response.ok)throw new Error('The S3 backup could not be read.');const result=importBackupText(await readS3Backup(response),'the S3');msg.textContent=result?'Restored '+result.entryCount+' save records for '+result.romCount+' games. Reopen a ROM to use them.':'S3 restore cancelled.'}catch(error){msg.textContent='S3 restore failed: '+error.message}};refreshS3SaveStatus();
 document.getElementById('sound').onclick=()=>{const enabled=PocketBoyPlayer.toggleSound();document.getElementById('sound').textContent=enabled?'Sound Off':'Sound On';msg.textContent=enabled?'Sound enabled.':'Sound muted.'};
 const fullButton=document.getElementById('fullscreen'),fullTarget=document.querySelector('.screen');let pocketBoyScreenMode=false;
 async function enterScreenMode(){if(!PocketBoyPlayer.hasGame()){msg.textContent='Load a game before entering fullscreen.';return}pocketBoyScreenMode=true;document.body.classList.add('game-fullscreen');fullButton.textContent='Exit fullscreen';msg.textContent='Controller screen mode active. Press L2 to exit.';try{if(fullTarget.requestFullscreen)await fullTarget.requestFullscreen({navigationUI:'hide'});else if(fullTarget.webkitRequestFullscreen)fullTarget.webkitRequestFullscreen()}catch(error){}if(document.fullscreenElement&&screen.orientation&&screen.orientation.lock){try{await screen.orientation.lock('landscape')}catch(error){}}}
@@ -114,6 +128,16 @@ void WebPortal::begin() {
     snprintf(secret, sizeof(secret), "Boy%08X", static_cast<uint32_t>(chipId));
     ssid_ = String("PocketBoy-") + suffix;
     password_ = secret;
+
+    saveStorageReady_ = saveFs_.begin(true, "/pbsaves", 4, "saves");
+    if (saveStorageReady_) {
+        saveFs_.remove(kSaveUploadPath);
+        if (!saveFs_.exists(kSaveBackupPath) && saveFs_.exists(kSavePreviousPath)) {
+            saveFs_.rename(kSavePreviousPath, kSaveBackupPath);
+        } else {
+            saveFs_.remove(kSavePreviousPath);
+        }
+    }
 
     WiFi.mode(WIFI_AP);
     WiFi.setSleep(true);
@@ -148,6 +172,121 @@ void WebPortal::sendStatus() {
     server_.send(200, "application/json", json);
 }
 
+void WebPortal::sendSaveStorageStatus() {
+    String json = "{\"ready\":" + String(saveStorageReady_ ? "true" : "false");
+    if (saveStorageReady_) {
+        const bool hasBackup = saveFs_.exists(kSaveBackupPath);
+        size_t backupSize = 0;
+        if (hasBackup) {
+            File file = saveFs_.open(kSaveBackupPath, FILE_READ);
+            if (file) backupSize = file.size();
+        }
+        json += ",\"hasBackup\":" + String(hasBackup ? "true" : "false");
+        json += ",\"backupSize\":" + String(backupSize);
+        json += ",\"usedBytes\":" + String(saveFs_.usedBytes());
+        json += ",\"totalBytes\":" + String(saveFs_.totalBytes());
+        json += ",\"maxBackupBytes\":" + String(kMaxStoredBackupBytes);
+    }
+    json += "}";
+    server_.sendHeader("Cache-Control", "no-store");
+    server_.send(saveStorageReady_ ? 200 : 503, "application/json", json);
+}
+
+void WebPortal::sendSaveBackup() {
+    if (!saveStorageReady_) {
+        server_.send(503, "application/json", "{\"error\":\"Save storage is unavailable.\"}");
+        return;
+    }
+    File file = saveFs_.open(kSaveBackupPath, FILE_READ);
+    if (!file) {
+        server_.send(404, "application/json", "{\"error\":\"No S3 backup has been stored yet.\"}");
+        return;
+    }
+    server_.sendHeader("Cache-Control", "no-store");
+    server_.sendHeader("Content-Disposition", "attachment; filename=\"pocketboy-s3-saves.json\"");
+    server_.streamFile(file, "application/json");
+    file.close();
+}
+
+void WebPortal::handleSaveUpload() {
+    HTTPUpload &upload = server_.upload();
+    if (upload.status == UPLOAD_FILE_START) {
+        saveUploadOk_ = saveStorageReady_;
+        saveUploadBytes_ = 0;
+        saveUploadError_ = saveStorageReady_ ? "" : "Save storage is unavailable.";
+        if (saveUpload_) saveUpload_.close();
+        if (saveStorageReady_) {
+            saveFs_.remove(kSaveUploadPath);
+            saveUpload_ = saveFs_.open(kSaveUploadPath, FILE_WRITE);
+            if (!saveUpload_) {
+                saveUploadOk_ = false;
+                saveUploadError_ = "Could not create the temporary backup.";
+            }
+        }
+    } else if (upload.status == UPLOAD_FILE_WRITE) {
+        if (!saveUploadOk_) return;
+        if (saveUploadBytes_ + upload.currentSize > kMaxStoredBackupBytes) {
+            saveUploadOk_ = false;
+            saveUploadError_ = "The backup exceeds the S3 save-space limit.";
+            saveUpload_.close();
+            saveFs_.remove(kSaveUploadPath);
+            return;
+        }
+        if (saveUpload_.write(upload.buf, upload.currentSize) != upload.currentSize) {
+            saveUploadOk_ = false;
+            saveUploadError_ = "The S3 could not finish writing the backup.";
+            saveUpload_.close();
+            saveFs_.remove(kSaveUploadPath);
+            return;
+        }
+        saveUploadBytes_ += upload.currentSize;
+    } else if (upload.status == UPLOAD_FILE_END) {
+        if (saveUpload_) saveUpload_.close();
+        if (!saveUploadOk_ || saveUploadBytes_ == 0) {
+            if (saveUploadError_.isEmpty()) saveUploadError_ = "The uploaded backup was empty.";
+            saveUploadOk_ = false;
+            saveFs_.remove(kSaveUploadPath);
+            return;
+        }
+
+        saveFs_.remove(kSavePreviousPath);
+        const bool hadBackup = saveFs_.exists(kSaveBackupPath);
+        if (hadBackup && !saveFs_.rename(kSaveBackupPath, kSavePreviousPath)) {
+            saveUploadOk_ = false;
+            saveUploadError_ = "The existing S3 backup could not be protected.";
+            saveFs_.remove(kSaveUploadPath);
+            return;
+        }
+        if (!saveFs_.rename(kSaveUploadPath, kSaveBackupPath)) {
+            saveUploadOk_ = false;
+            saveUploadError_ = "The new S3 backup could not be activated.";
+            if (hadBackup) saveFs_.rename(kSavePreviousPath, kSaveBackupPath);
+            saveFs_.remove(kSaveUploadPath);
+            return;
+        }
+        saveFs_.remove(kSavePreviousPath);
+    } else if (upload.status == UPLOAD_FILE_ABORTED) {
+        if (saveUpload_) saveUpload_.close();
+        saveFs_.remove(kSaveUploadPath);
+        saveUploadOk_ = false;
+        saveUploadError_ = "The backup upload was interrupted.";
+    }
+}
+
+void WebPortal::finishSaveUpload() {
+    if (!saveUploadOk_) {
+        String json = "{\"error\":\"" + saveUploadError_ + "\"}";
+        server_.send(507, "application/json", json);
+        saveUploadBytes_ = 0;
+        return;
+    }
+    String json = "{\"stored\":true,\"backupSize\":" + String(saveUploadBytes_) + "}";
+    saveUploadOk_ = false;
+    saveUploadBytes_ = 0;
+    server_.sendHeader("Cache-Control", "no-store");
+    server_.send(201, "application/json", json);
+}
+
 void WebPortal::configureRoutes() {
     server_.on("/", HTTP_GET, [this]() {
         server_.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate");
@@ -170,6 +309,11 @@ void WebPortal::configureRoutes() {
         server_.send_P(200, "application/wasm", reinterpret_cast<PGM_P>(kBinjgbWasm), kBinjgbWasmSize);
     });
     server_.on("/api/status", HTTP_GET, [this]() { sendStatus(); });
+    server_.on("/api/saves", HTTP_GET, [this]() { sendSaveStorageStatus(); });
+    server_.on("/api/saves/backup", HTTP_GET, [this]() { sendSaveBackup(); });
+    server_.on("/api/saves/backup", HTTP_POST,
+        [this]() { finishSaveUpload(); },
+        [this]() { handleSaveUpload(); });
     server_.on("/generate_204", HTTP_GET, [this]() { server_.sendHeader("Location", "/", true); server_.send(302); });
     server_.on("/hotspot-detect.html", HTTP_GET, [this]() { server_.send_P(200, "text/html", kPage); });
     server_.on("/connecttest.txt", HTTP_GET, [this]() { server_.sendHeader("Location", "/", true); server_.send(302); });

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.5.0-prototype
+
+- Added explicit Sync to S3 and Restore S3 controls to the player.
+- Split the previous filesystem space into a dedicated 1 MiB save partition and a reserved 2 MiB game-library partition.
+- Compresses the checksummed Chrome backup and stores it on the S3 with a safe 420 KiB payload limit.
+- Uploads to a temporary file and protects the previous backup until replacement succeeds.
+- Recovers an interrupted replacement on the next boot.
+- Keeps manual JSON export/import available for full-chip erase recovery.
+
 ## v0.4.0-prototype
 
 - Added one-file export for every PocketBoy battery save and save state in Chrome.
