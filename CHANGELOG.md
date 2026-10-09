@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.3.1-prototype
+
+- Added explicit WebGL buffer, texture, shader, and program cleanup between games.
+- Added explicit cleanup for completed and abandoned Web Audio sources.
+- Fixed WASM ROM memory not being released after an invalid ROM load.
+- Ends active rewind state cleanly before replacing a game.
+- Prevented overlapping battery requests and reduced per-frame gamepad allocations.
+
 ## v0.3.0-prototype
 
 - Added a color-coded battery gauge to the StickS3 status screen.

@@ -212,6 +212,8 @@ class Emulator {
         this.romDataPtr, size, Audio.ctx.sampleRate, AUDIO_FRAMES,
         CGB_COLOR_CURVE);
     if (this.e == 0) {
+      this.module._free(this.romDataPtr);
+      this.romDataPtr = 0;
       throw new Error('Invalid ROM.');
     }
 
@@ -224,6 +226,7 @@ class Emulator {
     this.leftoverTicks = 0;
     this.fps = 60;
     this.fastForward = false;
+    this.boundRafCallback = this.rafCallback.bind(this);
 
     if (extRamBuffer && extRamBuffer.byteLength > 0) {
       this.loadExtRam(extRamBuffer);
@@ -243,8 +246,11 @@ class Emulator {
     clearInterval(this.rewindIntervalId);
     this.rewind.destroy();
     this.audio.destroy();
+    this.video.destroy();
     this.module._emulator_delete(this.e);
     this.module._free(this.romDataPtr);
+    this.e = 0;
+    this.romDataPtr = 0;
   }
 
   withNewFileData(fileDataPtr, cb) {
@@ -367,11 +373,11 @@ class Emulator {
   }
 
   requestAnimationFrame() {
-    this.rafCancelToken = requestAnimationFrame(this.rafCallback.bind(this));
+    this.rafCancelToken = requestAnimationFrame(this.boundRafCallback);
   }
 
   cancelAnimationFrame() {
-    cancelAnimationFrame(this.rafCancelToken);
+    if (this.rafCancelToken !== null) cancelAnimationFrame(this.rafCancelToken);
     this.rafCancelToken = null;
   }
 
@@ -661,6 +667,7 @@ class Audio {
     this.buffer = makeWasmBuffer(
         this.module, this.module._get_audio_buffer_ptr(e),
         this.module._get_audio_buffer_capacity(e));
+    this.sources = new Set();
     this.startSec = 0;
     this.resume();
 
@@ -697,6 +704,11 @@ class Audio {
       const bufferSource = Audio.ctx.createBufferSource();
       bufferSource.buffer = buffer;
       bufferSource.connect(Audio.ctx.destination);
+      this.sources.add(bufferSource);
+      bufferSource.onended = () => {
+        bufferSource.disconnect();
+        this.sources.delete(bufferSource);
+      };
       bufferSource.start(this.startSec);
       const bufferSec = AUDIO_FRAMES / this.sampleRate;
       this.startSec += bufferSec;
@@ -725,6 +737,12 @@ class Audio {
       window.removeEventListener('touchend', this.boundStartPlayback, true);
       this.boundStartPlayback = null;
     }
+    for (const source of this.sources) {
+      source.onended = null;
+      try { source.stop(); } catch (error) {}
+      source.disconnect();
+    }
+    this.sources.clear();
     this.buffer = null;
     this.started = false;
   }
@@ -760,6 +778,12 @@ class Video {
   renderTexture() {
     this.renderer.renderTexture();
   }
+
+  destroy() {
+    this.renderer.destroy();
+    this.renderer = null;
+    this.buffer = null;
+  }
 }
 
 class Canvas2DRenderer {
@@ -775,6 +799,11 @@ class Canvas2DRenderer {
   uploadTexture(buffer) {
     this.imageData.data.set(buffer);
   }
+
+  destroy() {
+    this.imageData = null;
+    this.ctx = null;
+  }
 }
 
 class WebGLRenderer {
@@ -786,8 +815,8 @@ class WebGLRenderer {
 
     const w = SCREEN_WIDTH / 256;
     const h = SCREEN_HEIGHT / 256;
-    const buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    this.vertexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
       -1, -1,  0, h,
       +1, -1,  w, h,
@@ -795,8 +824,8 @@ class WebGLRenderer {
       +1, +1,  w, 0,
     ]), gl.STATIC_DRAW);
 
-    const texture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texture);
+    this.texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.texture);
     gl.texImage2D(
         gl.TEXTURE_2D, 0, gl.RGBA, 256, 256, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
@@ -812,7 +841,7 @@ class WebGLRenderer {
       return shader;
     }
 
-    const vertexShader = compileShader(gl.VERTEX_SHADER,
+    const vertexShader = this.vertexShader = compileShader(gl.VERTEX_SHADER,
        `attribute vec2 aPos;
         attribute vec2 aTexCoord;
         varying highp vec2 vTexCoord;
@@ -820,14 +849,14 @@ class WebGLRenderer {
           gl_Position = vec4(aPos, 0.0, 1.0);
           vTexCoord = aTexCoord;
         }`);
-    const fragmentShader = compileShader(gl.FRAGMENT_SHADER,
+    const fragmentShader = this.fragmentShader = compileShader(gl.FRAGMENT_SHADER,
        `varying highp vec2 vTexCoord;
         uniform sampler2D uSampler;
         void main(void) {
           gl_FragColor = texture2D(uSampler, vTexCoord);
         }`);
 
-    const program = gl.createProgram();
+    const program = this.program = gl.createProgram();
     gl.attachShader(program, vertexShader);
     gl.attachShader(program, fragmentShader);
     gl.linkProgram(program);
@@ -858,6 +887,19 @@ class WebGLRenderer {
         this.gl.TEXTURE_2D, 0, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, this.gl.RGBA,
         this.gl.UNSIGNED_BYTE, buffer);
   }
+
+  destroy() {
+    const gl = this.gl;
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.useProgram(null);
+    gl.deleteBuffer(this.vertexBuffer);
+    gl.deleteTexture(this.texture);
+    gl.deleteProgram(this.program);
+    gl.deleteShader(this.vertexShader);
+    gl.deleteShader(this.fragmentShader);
+    this.gl = null;
+  }
 }
 
 class Rewind {
@@ -872,8 +914,11 @@ class Rewind {
   }
 
   destroy() {
+    this.endRewind();
     this.module._rewind_delete(this.bufferPtr);
     this.module._joypad_delete(this.joypadBufferPtr);
+    this.bufferPtr = 0;
+    this.joypadBufferPtr = 0;
   }
 
   get oldestTicks() {
@@ -945,9 +990,11 @@ function showGamepadPress(id, pressed) {
 
 function pollPocketBoyGamepad() {
   const statusEl = document.getElementById('gamepadStatus');
-  const pads = typeof navigator.getGamepads === 'function'
-      ? Array.from(navigator.getGamepads()).filter(Boolean) : [];
-  const gamepad = pads[0];
+  const pads = typeof navigator.getGamepads === 'function' ? navigator.getGamepads() : [];
+  let gamepad = null;
+  for (let i = 0; i < pads.length; ++i) {
+    if (pads[i]) { gamepad = pads[i]; break; }
+  }
   if (statusEl) {
     statusEl.textContent = gamepad ? gamepad.id : 'No controller detected';
     statusEl.classList.toggle('connected', !!gamepad);
