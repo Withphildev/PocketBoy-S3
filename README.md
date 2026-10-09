@@ -2,7 +2,7 @@
 
 PocketBoy S3 is an offline, browser-based Game Boy and Game Boy Color player hosted by an M5Stack StickS3.
 
-> **Playable prototype — v0.3.2.** This build adds local GB/GBC emulation in the phone browser. It still needs broad game, audio, save, and mobile-device testing.
+> **Playable prototype — v0.3.3.** This build adds local GB/GBC emulation in the phone browser. It still needs broad game, audio, save, and mobile-device testing.
 
 ## Current prototype
 
@@ -27,6 +27,7 @@ PocketBoy S3 is an offline, browser-based Game Boy and Game Boy Color player hos
 - Shows live battery percentage and charging state on the StickS3 and in both WebUI pages.
 - Explicitly releases browser GPU, audio, rewind, and WASM resources when games are changed.
 - Loads save states atomically after resetting frame, audio, and rewind timelines.
+- Locks Save State and Load State for the first 1.5 seconds after each game starts.
 - Shows live buttons, D-pad, left stick, Start, and Select input.
 - Displays Wi-Fi onboarding or a join QR code on the StickS3.
 - Dims the display after 30 seconds while keeping the portal active.

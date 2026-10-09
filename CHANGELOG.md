@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.3.3-prototype
+
+- Locks Save State and Load State during the first 1.5 seconds after a ROM starts.
+- Shows the locked state visually and announces when both controls are ready.
+- Enforces the startup delay inside the player API as well as the WebUI.
+- Keeps the atomic state-loading safeguards introduced in v0.3.2.
+
 ## v0.3.2-prototype
 
 - Fixed intermittent corruption when loading a save state immediately after reloading a game.

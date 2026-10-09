@@ -64,6 +64,8 @@ const EVENT_UNTIL_TICKS = 4;
 const $ = document.querySelector.bind(document);
 let emulator = null;
 let currentSaveKey = 'pocketboy:unspecified';
+let stateControlsReadyAt = Infinity;
+const STATE_CONTROL_DELAY_MS = 1500;
 
 const controllerEl = $('#controller');
 const dpadEl = $('#controller_dpad');
@@ -136,12 +138,14 @@ function romFingerprint(bytes) {
 
 window.PocketBoyPlayer = {
   async start(romBuffer) {
+    stateControlsReadyAt = Infinity;
     const bytes = new Uint8Array(romBuffer);
     currentSaveKey = 'pocketboy:' + romFingerprint(bytes);
     const saved = localStorage.getItem(currentSaveKey + ':extram');
     const extRam = saved ? new Uint8Array(JSON.parse(saved)) : new Uint8Array();
     Emulator.start(await binjgbPromise, romBuffer, extRam);
     emulator.setBuiltinPalette(vm.palIdx);
+    stateControlsReadyAt = performance.now() + STATE_CONTROL_DELAY_MS;
     return currentSaveKey;
   },
   pause() { if (emulator) vm.paused = true; },
@@ -152,16 +156,21 @@ window.PocketBoyPlayer = {
     return vm.paused;
   },
   saveState() {
-    if (!emulator) return false;
+    if (!emulator || performance.now() < stateControlsReadyAt) return false;
     emulator.saveState();
     return true;
   },
   async loadState() {
-    if (!emulator || !localStorage.getItem(currentSaveKey + ':state')) return false;
+    if (!emulator || performance.now() < stateControlsReadyAt ||
+        !localStorage.getItem(currentSaveKey + ':state')) return false;
     await new Promise(resolve => requestAnimationFrame(resolve));
-    if (!emulator) return false;
+    if (!emulator || performance.now() < stateControlsReadyAt) return false;
     emulator.loadState();
     return true;
+  },
+  stateReadyInMs() {
+    if (!emulator) return null;
+    return Math.max(0, Math.ceil(stateControlsReadyAt - performance.now()));
   },
   setVolume(value) {
     vm.preferredVolume = Math.max(0, Math.min(1, Number(value)));
