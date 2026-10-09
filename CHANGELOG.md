@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.7-prototype
+
+- Fixed portrait fullscreen clipping caused by rotating the fullscreen container itself.
+- Kept the fullscreen container aligned to the device viewport and rotates only the game canvas.
+- Added dynamic viewport units so Chrome's browser controls do not distort the fullscreen dimensions.
+
 ## v0.2.6-prototype
 
 - Removed the controller-detection lock from the fullscreen button while keeping fullscreen controller-only.
