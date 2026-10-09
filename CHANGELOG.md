@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.0
+
+- Promoted the hardware-tested v0.6 feature set to the first stable release.
+- Finalized installation, usage, controller, storage, recovery, privacy, and troubleshooting documentation.
+- Added a public release-validation checklist.
+- Updated firmware and WebUI version markers and browser cache keys.
+
 ## v0.6.0-prototype
 
 - Added a StickS3-hosted homebrew GB/GBC game library.
