@@ -146,9 +146,21 @@ window.PocketBoyPlayer = {
   },
   pause() { if (emulator) vm.paused = true; },
   resume() { if (emulator) vm.paused = false; },
-  togglePause() { if (emulator) vm.togglePause(); return vm.paused; },
-  saveState() { if (emulator) emulator.saveState(); },
-  loadState() { if (emulator) emulator.loadState(); },
+  togglePause() {
+    if (!emulator) return null;
+    vm.togglePause();
+    return vm.paused;
+  },
+  saveState() {
+    if (!emulator) return false;
+    emulator.saveState();
+    return true;
+  },
+  loadState() {
+    if (!emulator || !localStorage.getItem(currentSaveKey + ':state')) return false;
+    emulator.loadState();
+    return true;
+  },
   setVolume(value) {
     vm.preferredVolume = Math.max(0, Math.min(1, Number(value)));
     if (vm.soundEnabled) vm.volume = vm.preferredVolume;
@@ -907,6 +919,11 @@ function gamepadButton(gamepad, index) {
   return !!(gamepad && gamepad.buttons[index] && gamepad.buttons[index].pressed);
 }
 
+function gamepadAnalogButton(gamepad, index) {
+  const button = gamepad && gamepad.buttons[index];
+  return !!(button && (button.pressed || button.value > 0.35));
+}
+
 let pocketBoyTouchActive = false;
 let pocketBoyGamepadConnected = false;
 let pocketBoyL2Pressed = false;
@@ -943,7 +960,7 @@ function pollPocketBoyGamepad() {
     }
   }
   pocketBoyGamepadConnected = !!gamepad;
-  const l2Pressed = gamepadButton(gamepad, 6);
+  const l2Pressed = gamepadAnalogButton(gamepad, 6);
   if (l2Pressed && !pocketBoyL2Pressed && window.PocketBoyFullscreen) {
     window.PocketBoyFullscreen.toggle();
   }

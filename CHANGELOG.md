@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.2.6-prototype
+
+- Removed the controller-detection lock from the fullscreen button while keeping fullscreen controller-only.
+- Fixed L2 detection for controllers that report an analog trigger value without setting `pressed`.
+- Disabled browser caching for the player page and JavaScript so firmware updates take effect immediately.
+- Added visible Pause, Save State, and Load State success and error feedback.
+
 ## v0.2.5-prototype
 
 - Replaced the hard dependency on Chrome's Fullscreen API with an immediate CSS screen-mode fallback.

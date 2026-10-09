@@ -83,18 +83,18 @@ body.game-fullscreen{overflow:hidden}body.game-fullscreen .screen,.screen:fullsc
 </style></head><body><main><header class="top"><div class="brand">Pocket<span>Boy</span> S3</div><a class="back" href="/">Controller lab</a></header>
 <div class="shell"><section class="screenCard"><div class="screen"><canvas id="mainCanvas" width="160" height="144"></canvas><div id="empty" class="empty"><strong>Select a game</strong>Open one of your homebrew .gb or .gbc files from this phone.</div></div>
 <div id="controller" class="touch"><div id="controller_dpad" class="dpad"><div id="controller_left" class="left"></div><div id="controller_right" class="right"></div><div id="controller_up" class="up"></div><div id="controller_down" class="down"></div></div><div id="controller_select" class="capsuleBtn">Select</div><div id="controller_start" class="capsuleBtn">Start</div><div id="controller_b" class="roundBtn">B</div><div id="controller_a" class="roundBtn">A</div></div></section>
-<aside class="side"><div class="controls"><label class="file">Open .gb / .gbc<input id="rom" type="file" accept=".gb,.gbc,application/octet-stream"></label><div id="romName" class="status">No game loaded</div><div id="gamepadStatus" class="status">No controller detected</div><div class="row"><button id="sound">Sound On</button><button id="fullscreen">Enter fullscreen</button></div><div class="row"><button id="pause">Pause</button><button id="save">Save state</button></div><button id="load">Load state</button><label class="range">Volume<input id="volume" type="range" min="0" max="1" value="0.5" step="0.05"></label><p class="note">B/Circle controls Game Boy A; A/Cross controls Game Boy B. L2 toggles controller-only fullscreen. Saves stay in this browser and are separated by ROM.</p><div id="message" class="status">Ready. Choose a legally obtained homebrew ROM.</div></div></aside></div></main>
-<script src="/binjgb.js"></script><script src="/player.js"></script><script>
+<aside class="side"><div class="controls"><label class="file">Open .gb / .gbc<input id="rom" type="file" accept=".gb,.gbc,application/octet-stream"></label><div id="romName" class="status">No game loaded</div><div id="gamepadStatus" class="status">No controller detected</div><div class="row"><button type="button" id="sound">Sound On</button><button type="button" id="fullscreen">Enter fullscreen</button></div><div class="row"><button type="button" id="pause">Pause</button><button type="button" id="save">Save state</button></div><button type="button" id="load">Load state</button><label class="range">Volume<input id="volume" type="range" min="0" max="1" value="0.5" step="0.05"></label><p class="note">B/Circle controls Game Boy A; A/Cross controls Game Boy B. L2 toggles controller-only fullscreen. Saves stay in this browser and are separated by ROM.</p><div id="message" class="status">PocketBoy v0.2.6 ready. Choose a legally obtained homebrew ROM.</div></div></aside></div></main>
+<script src="/binjgb.js?v=026"></script><script src="/player.js?v=026"></script><script>
 const rom=document.getElementById('rom'),msg=document.getElementById('message'),empty=document.getElementById('empty');
 rom.addEventListener('change',async()=>{const file=rom.files&&rom.files[0];if(!file)return;if(!/\.(gb|gbc)$/i.test(file.name)){msg.textContent='Please choose a .gb or .gbc file.';return}try{msg.textContent='Loading '+file.name+'…';await PocketBoyPlayer.start(await file.arrayBuffer());document.getElementById('romName').textContent=file.name;empty.style.display='none';msg.textContent='Running. Press a controller button if it has been idle.'}catch(error){console.error(error);msg.textContent='Could not start this ROM: '+error.message}});
-document.getElementById('pause').onclick=()=>{const paused=PocketBoyPlayer.togglePause();document.getElementById('pause').textContent=paused?'Resume':'Pause'};
-document.getElementById('save').onclick=()=>{PocketBoyPlayer.saveState();msg.textContent='Save state stored in this browser.'};document.getElementById('load').onclick=()=>{PocketBoyPlayer.loadState();msg.textContent='Save state loaded.'};document.getElementById('volume').oninput=e=>PocketBoyPlayer.setVolume(e.target.value);
+document.getElementById('pause').onclick=()=>{try{const paused=PocketBoyPlayer.togglePause();if(paused===null){msg.textContent='Load a game before using Pause.';return}document.getElementById('pause').textContent=paused?'Resume':'Pause';msg.textContent=paused?'Game paused.':'Game resumed.'}catch(error){msg.textContent='Pause failed: '+error.message}};
+document.getElementById('save').onclick=()=>{try{msg.textContent=PocketBoyPlayer.saveState()?'Save state stored in this browser.':'Load a game before saving.'}catch(error){msg.textContent='Save failed: '+error.message}};document.getElementById('load').onclick=()=>{try{msg.textContent=PocketBoyPlayer.loadState()?'Save state loaded.':'No save state exists for this game yet.'}catch(error){msg.textContent='Load failed: '+error.message}};document.getElementById('volume').oninput=e=>PocketBoyPlayer.setVolume(e.target.value);
 document.getElementById('sound').onclick=()=>{const enabled=PocketBoyPlayer.toggleSound();document.getElementById('sound').textContent=enabled?'Sound Off':'Sound On';msg.textContent=enabled?'Sound enabled.':'Sound muted.'};
-const fullButton=document.getElementById('fullscreen'),fullTarget=document.querySelector('.screen'),playerShell=document.querySelector('.screenCard');let pocketBoyScreenMode=false;
-async function enterScreenMode(){if(!PocketBoyPlayer.hasGame()){msg.textContent='Load a game before entering fullscreen.';return}if(!playerShell.classList.contains('has-gamepad')){msg.textContent='Connect and activate a Bluetooth controller before entering fullscreen.';return}pocketBoyScreenMode=true;document.body.classList.add('game-fullscreen');fullButton.textContent='Exit fullscreen';msg.textContent='Controller screen mode active. Press L2 to exit.';try{if(fullTarget.requestFullscreen)await fullTarget.requestFullscreen({navigationUI:'hide'});else if(fullTarget.webkitRequestFullscreen)fullTarget.webkitRequestFullscreen()}catch(error){}if(document.fullscreenElement&&screen.orientation&&screen.orientation.lock){try{await screen.orientation.lock('landscape')}catch(error){}}}
+const fullButton=document.getElementById('fullscreen'),fullTarget=document.querySelector('.screen');let pocketBoyScreenMode=false;
+async function enterScreenMode(){if(!PocketBoyPlayer.hasGame()){msg.textContent='Load a game before entering fullscreen.';return}pocketBoyScreenMode=true;document.body.classList.add('game-fullscreen');fullButton.textContent='Exit fullscreen';msg.textContent='Controller screen mode active. Press L2 to exit.';try{if(fullTarget.requestFullscreen)await fullTarget.requestFullscreen({navigationUI:'hide'});else if(fullTarget.webkitRequestFullscreen)fullTarget.webkitRequestFullscreen()}catch(error){}if(document.fullscreenElement&&screen.orientation&&screen.orientation.lock){try{await screen.orientation.lock('landscape')}catch(error){}}}
 async function exitScreenMode(){if(!pocketBoyScreenMode&&!document.fullscreenElement)return;pocketBoyScreenMode=false;document.body.classList.remove('game-fullscreen');fullButton.textContent='Enter fullscreen';if(screen.orientation&&screen.orientation.unlock)screen.orientation.unlock();if(document.fullscreenElement&&document.exitFullscreen){try{await document.exitFullscreen()}catch(error){}}}
 function toggleScreenMode(){if(pocketBoyScreenMode||document.fullscreenElement)exitScreenMode();else enterScreenMode()}
-window.PocketBoyFullscreen={toggle:toggleScreenMode,exit:exitScreenMode};fullButton.onclick=toggleScreenMode;document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&pocketBoyScreenMode)exitScreenMode()});
+window.PocketBoyFullscreen={toggle:toggleScreenMode,exit:exitScreenMode};fullButton.onclick=toggleScreenMode;
 </script></body></html>
 )HTML";
 }
@@ -135,14 +135,20 @@ void WebPortal::sendStatus() {
 }
 
 void WebPortal::configureRoutes() {
-    server_.on("/", HTTP_GET, [this]() { server_.send_P(200, "text/html", kPage); });
-    server_.on("/play", HTTP_GET, [this]() { server_.send_P(200, "text/html", kPlayerPage); });
+    server_.on("/", HTTP_GET, [this]() {
+        server_.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+        server_.send_P(200, "text/html", kPage);
+    });
+    server_.on("/play", HTTP_GET, [this]() {
+        server_.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+        server_.send_P(200, "text/html", kPlayerPage);
+    });
     server_.on("/binjgb.js", HTTP_GET, [this]() {
-        server_.sendHeader("Cache-Control", "public, max-age=86400");
+        server_.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate");
         server_.send_P(200, "text/javascript", reinterpret_cast<PGM_P>(kBinjgbJs), kBinjgbJsSize);
     });
     server_.on("/player.js", HTTP_GET, [this]() {
-        server_.sendHeader("Cache-Control", "public, max-age=86400");
+        server_.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate");
         server_.send_P(200, "text/javascript", reinterpret_cast<PGM_P>(kPlayerJs), kPlayerJsSize);
     });
     server_.on("/binjgb.wasm", HTTP_GET, [this]() {
