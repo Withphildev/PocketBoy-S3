@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.8-prototype
+
+- Added a PocketBoy S3 boot splash to the StickS3 display.
+- Shows PocketBoy branding, GB/GBC support, firmware version, and startup progress.
+- Keeps the splash visible for at least 1.5 seconds before showing Wi-Fi connection details.
+
 ## v0.2.7-prototype
 
 - Fixed portrait fullscreen clipping caused by rotating the fullscreen container itself.
